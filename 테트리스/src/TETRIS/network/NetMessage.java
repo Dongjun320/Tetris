@@ -14,17 +14,26 @@ import java.util.Map;
 public class NetMessage {
 
     public enum Type {
-        HELLO,       // 연결 직후 인사
-        WELCOME,     // 호스트의 응답
-        READY,       // 양쪽 준비 완료
-        START,       // 게임 시작
-        STATE,       // 보드 상태(주기적 송신)
-        GARBAGE,     // 상대에게 가비지 라인 공격
-        GAMEOVER,    // 게임 종료(패배 알림)
-        RESTART,     // 재시작 요청 (한쪽이 R 누르면 양쪽 동시 시작)
-        PING,        // 연결 확인
-        PONG,        // 핑 응답
-        DISCONNECT   // 정상 종료 알림
+        // ── 연결/방 메시지 ───────────────────────────
+        HELLO,       // 연결 직후 인사 (name 전달)
+        WELCOME,     // (호환용) 호스트 응답 — 현재는 JOIN_OK 사용
+        JOIN_OK,     // 호스트→게스트: 입장 승인 + playerId 부여 (id, maxPlayers)
+        PLAYER_LIST, // 호스트→모두: 인원/이름/ready 상태 일괄 갱신 (n, p0=id:name:ready, p1=...)
+        READY,       // 게스트↔호스트: 준비 상태 토글 (from, ready=0/1)
+        START,       // 호스트→모두: 게임 시작 신호
+
+        // ── 인게임 메시지 ────────────────────────────
+        STATE,       // 보드 상태 주기적 송신 (from=playerId, board, cur, ...)
+        GARBAGE,     // 공격 (from=공격자, target=피공격자, lines=라인 수)
+        GAMEOVER,    // 자기 패배 알림 (from=playerId, 호스트가 받아 ELIMINATED 브로드캐스트)
+        ELIMINATED,  // 호스트→모두: 특정 플레이어 탈락 (id, rank=현재 등수)
+        RANKING,     // 호스트→모두: 최종 순위 (ids=2,1,3,4 → 1등→꼴등 순)
+
+        // ── 시스템 ───────────────────────────────────
+        RESTART,     // (호환용) 1:1 모드 재시작 신호 — 현재는 방 시스템으로 대체
+        PING,
+        PONG,
+        DISCONNECT
     }
 
     public final Type type;

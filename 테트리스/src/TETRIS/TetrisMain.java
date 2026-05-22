@@ -55,11 +55,15 @@ public class TetrisMain {
             roomPanel.setOnLeave(
                 () -> switchPanel(frame, container, cards, homePanel, "home", null)
             );
-            // 양쪽 READY → 게임으로
+            // 모두 READY → 게임으로 (호스트가 START 송신, 모든 클라이언트가 이 콜백 받음)
             roomPanel.setOnStartGame(() -> {
-                // 게임 패널에 동일한 네트워크를 넘겨주고 시작
-                // (RoomPanel과 NetworkPanel은 같은 NetworkManager 인스턴스를 공유)
-                netPanel.setupConnection(getRoomNetwork(roomPanel), roomPanel.isHostSide());
+                netPanel.setupConnection(
+                        roomPanel.getNetwork(),
+                        roomPanel.isHostSide(),
+                        roomPanel.getMyPlayerId(),
+                        roomPanel.getMaxPlayers(),
+                        roomPanel.getPlayers()
+                );
                 switchPanel(frame, container, cards, netPanel, "online",
                             netPanel::startGame);
             });
@@ -91,11 +95,6 @@ public class TetrisMain {
             switchPanel(frame, container, cards, homePanel, "home", null);
             frame.setVisible(true);
         });
-    }
-
-    /** 방 패널이 보유한 NetworkManager에 접근 (방→게임으로 동일 연결을 넘기기 위함) */
-    private static TETRIS.network.NetworkManager getRoomNetwork(RoomPanel room) {
-        return room.getNetwork();
     }
 
     /**

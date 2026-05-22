@@ -3,155 +3,240 @@ package TETRIS.network;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 
 /**
- * TCP 소켓 통신 매니저.
+ * TCP 소켓 통신 매니저 (호스트-스타 모델, 최대 4인).
  *
  * <ul>
- *   <li>호스트 모드: {@link #host(int)} → ServerSocket으로 한 명을 받아 연결</li>
- *   <li>게스트 모드: {@link #connect(String, int)} → 호스트 IP로 접속</li>
+ *   <li>호스트 모드: {@link #host(int, int)} → ServerSocket으로 여러 클라이언트를 받음.
+ *       각 클라이언트에 playerId(2,3,4)를 부여하고 별도 스레드로 메시지를 수신함.</li>
+ *   <li>게스트 모드: {@link #connect(String, int)} → 호스트에 단일 연결.
+ *       호스트가 JOIN_OK로 부여해주는 playerId를 받아 사용.</li>
  * </ul>
  *
- * 메시지 수신은 별도 스레드에서 이루어지므로,
- * Swing UI를 갱신하려면 콜백 안에서 SwingUtilities.invokeLater()로 감싸야 한다.
+ * 호스트의 playerId는 항상 <b>1</b>이고, 게스트는 접속 순서대로 2, 3, 4를 부여받는다.
+ *
+ * <p>받은 메시지는 모두 {@code onMessage} 콜백으로 전달된다.
+ * 메시지의 {@code from} 필드를 보면 누가 보낸 건지 알 수 있다.
+ * 호스트가 받은 메시지에서 {@code from}이 비어 있으면 자동으로 클라이언트 ID로 보정된다.</p>
+ *
+ * <p>UI 갱신은 콜백 안에서 {@code SwingUtilities.invokeLater()}로 감싸야 한다.</p>
  */
 public class NetworkManager {
 
     public static final int DEFAULT_PORT = 5555;
+    public static final int HOST_ID      = 1;
 
-    private volatile Socket       socket;
-    private volatile ServerSocket serverSocket;
-    private BufferedReader        in;
-    private PrintWriter           out;
-    private Thread                receiveThread;
-    private volatile boolean      running;
+    // ── 공통 ──────────────────────────────────────────────
+    private volatile boolean isHost;
+    private volatile int     myPlayerId = HOST_ID;
+    private volatile boolean running    = false;
 
-    private Consumer<NetMessage>  onMessage;
-    private Runnable              onConnect;
-    private Runnable              onDisconnect;
+    private Consumer<NetMessage> onMessage;
+    private Runnable             onConnect;
+    private Runnable             onDisconnect;
+    private IntConsumer          onClientConnect;     // 호스트 전용: 새 클라이언트 입장(playerId)
+    private IntConsumer          onClientDisconnect;  // 호스트 전용: 클라이언트 끊김(playerId)
 
-    // ── 콜백 등록 ──────────────────────────────────────────
-    public void setOnMessage(Consumer<NetMessage> h)  { this.onMessage = h; }
-    public void setOnConnect(Runnable h)              { this.onConnect = h; }
-    public void setOnDisconnect(Runnable h)           { this.onDisconnect = h; }
+    // ── 게스트 전용 ───────────────────────────────────────
+    private Socket          guestSocket;
+    private BufferedReader  guestIn;
+    private PrintWriter     guestOut;
+    private Thread          guestReceiveThread;
 
-    // ── 호스트 모드 ────────────────────────────────────────
-    /** 지정 포트에서 게스트 한 명을 기다리며, 연결되면 콜백 발생. */
-    public void host(int port) {
+    // ── 호스트 전용 ───────────────────────────────────────
+    private ServerSocket    serverSocket;
+    private int             maxPlayers   = 4;
+    private int             nextPlayerId = 2;
+    private final Map<Integer, ClientHandler> clients = new ConcurrentHashMap<>();
+
+    // ── 콜백 등록 ─────────────────────────────────────────
+    public void setOnMessage(Consumer<NetMessage> h)       { this.onMessage = h; }
+    public void setOnConnect(Runnable h)                   { this.onConnect = h; }
+    public void setOnDisconnect(Runnable h)                { this.onDisconnect = h; }
+    public void setOnClientConnect(IntConsumer h)          { this.onClientConnect = h; }
+    public void setOnClientDisconnect(IntConsumer h)       { this.onClientDisconnect = h; }
+
+    // ── 상태 조회 ─────────────────────────────────────────
+    public boolean isHost()        { return isHost; }
+    public int     getMyPlayerId() { return myPlayerId; }
+    public int     getMaxPlayers() { return maxPlayers; }
+    public boolean isConnected() {
+        if (!running) return false;
+        if (isHost)   return serverSocket != null || !clients.isEmpty();
+        return guestSocket != null && guestSocket.isConnected() && !guestSocket.isClosed();
+    }
+
+    /** 호스트가 보유 중인 클라이언트 playerId 집합(자기 자신 제외). */
+    public java.util.Set<Integer> getClientIds() {
+        return Collections.unmodifiableSet(clients.keySet());
+    }
+
+    // ── 호스트 모드 ───────────────────────────────────────
+    public void host(int port, int maxPlayers) {
+        this.isHost       = true;
+        this.myPlayerId   = HOST_ID;
+        this.maxPlayers   = Math.max(2, Math.min(4, maxPlayers));
+        this.nextPlayerId = 2;
+        this.running      = true;
+
         Thread t = new Thread(() -> {
             try {
                 serverSocket = new ServerSocket(port);
-                serverSocket.setSoTimeout(0);            // 무제한 대기
-                Socket s = serverSocket.accept();        // 게스트 접속 대기
-                try { serverSocket.close(); } catch (Exception ignore) {}
-                serverSocket = null;
-                attach(s);
+                if (onConnect != null) onConnect.run();   // 방이 열렸음을 알림
+                while (running) {
+                    Socket s;
+                    try { s = serverSocket.accept(); }
+                    catch (IOException ex) { break; }
+
+                    // 정원 초과 시 거절
+                    int currentTotal = clients.size() + 1;  // +1 = 호스트 본인
+                    if (currentTotal >= this.maxPlayers) {
+                        try { s.close(); } catch (Exception ignore) {}
+                        continue;
+                    }
+                    int id;
+                    synchronized (this) { id = nextPlayerId++; }
+                    ClientHandler ch;
+                    try {
+                        ch = new ClientHandler(id, s);
+                        clients.put(id, ch);
+                        ch.start();
+                        ch.send(new NetMessage(NetMessage.Type.JOIN_OK)
+                                .put("id",         id)
+                                .put("maxPlayers", this.maxPlayers));
+                        if (onClientConnect != null) onClientConnect.accept(id);
+                    } catch (Exception e) {
+                        try { s.close(); } catch (Exception ignore) {}
+                    }
+                }
             } catch (IOException e) {
-                System.err.println("[Net] Host error: " + e.getMessage());
-                fireDisconnect();
+                System.err.println("[Net] Host listener error: " + e.getMessage());
+            } finally {
+                if (onDisconnect != null) onDisconnect.run();
             }
-        }, "Net-Host");
+        }, "Net-HostAccept");
         t.setDaemon(true);
         t.start();
     }
 
-    // ── 게스트 모드 ────────────────────────────────────────
-    /** 호스트의 IP/포트로 접속. */
+    // ── 게스트 모드 ───────────────────────────────────────
     public void connect(String host, int port) {
+        this.isHost  = false;
+        this.running = true;
+
         Thread t = new Thread(() -> {
             try {
                 Socket s = new Socket();
-                s.connect(new InetSocketAddress(host, port), 5000);  // 5초 타임아웃
-                attach(s);
+                s.connect(new InetSocketAddress(host, port), 5000);
+                s.setTcpNoDelay(true);
+                guestSocket = s;
+                guestIn  = new BufferedReader(new InputStreamReader(s.getInputStream(),  StandardCharsets.UTF_8));
+                guestOut = new PrintWriter   (new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8), true);
+                if (onConnect != null) onConnect.run();
+                startGuestReceiveLoop();
             } catch (IOException e) {
                 System.err.println("[Net] Connect error: " + e.getMessage());
-                fireDisconnect();
+                if (onDisconnect != null) onDisconnect.run();
             }
         }, "Net-Guest");
         t.setDaemon(true);
         t.start();
     }
 
-    // ── 연결 완료 후 스트림 설정 + 수신 루프 시작 ───────────
-    private void attach(Socket s) throws IOException {
-        this.socket = s;
-        s.setTcpNoDelay(true);                           // 작은 패킷도 지연 없이 전송
-        in  = new BufferedReader(new InputStreamReader(s.getInputStream(),  StandardCharsets.UTF_8));
-        out = new PrintWriter   (new OutputStreamWriter(s.getOutputStream(), StandardCharsets.UTF_8), true);
-        running = true;
-        fireConnect();
-        startReceiveLoop();
-    }
-
-    private void startReceiveLoop() {
-        receiveThread = new Thread(() -> {
+    private void startGuestReceiveLoop() {
+        guestReceiveThread = new Thread(() -> {
             try {
                 String line;
-                while (running && (line = in.readLine()) != null) {
+                while (running && (line = guestIn.readLine()) != null) {
                     NetMessage msg = NetMessage.deserialize(line);
                     if (msg == null) continue;
-                    if (msg.type == NetMessage.Type.DISCONNECT) {
-                        running = false;
-                        break;
+                    if (msg.type == NetMessage.Type.DISCONNECT) { running = false; break; }
+                    if (msg.type == NetMessage.Type.JOIN_OK) {
+                        myPlayerId = msg.getInt("id", 0);
+                        maxPlayers = msg.getInt("maxPlayers", 4);
                     }
                     if (onMessage != null) onMessage.accept(msg);
                 }
             } catch (IOException e) {
                 if (running) System.err.println("[Net] Receive error: " + e.getMessage());
             } finally {
-                fireDisconnect();
+                if (onDisconnect != null) onDisconnect.run();
             }
-        }, "Net-Receive");
-        receiveThread.setDaemon(true);
-        receiveThread.start();
+        }, "Net-GuestRecv");
+        guestReceiveThread.setDaemon(true);
+        guestReceiveThread.start();
     }
 
     // ── 메시지 송신 ────────────────────────────────────────
-    /** 메시지를 한 줄로 전송. 송신 실패는 조용히 무시 (수신 루프가 끊김을 감지). */
+    /** 호스트: 모든 클라이언트에 broadcast. 게스트: 호스트에게 송신. */
     public synchronized void send(NetMessage msg) {
-        if (out == null || msg == null) return;
-        out.println(msg.serialize());
-        // PrintWriter는 autoFlush=true 라서 별도 flush 불필요
+        if (msg == null) return;
+        if (isHost) {
+            broadcast(msg);
+        } else {
+            if (guestOut != null) guestOut.println(msg.serialize());
+        }
     }
 
-    // ── 상태 ───────────────────────────────────────────────
-    public boolean isConnected() {
-        return socket != null && socket.isConnected() && !socket.isClosed() && running;
+    /** 호스트 전용: 특정 클라이언트(id≥2)에게 송신. id=1(호스트 자신)이면 loopback. */
+    public synchronized void sendTo(int playerId, NetMessage msg) {
+        if (msg == null) return;
+        if (!isHost) { send(msg); return; }
+        if (playerId == HOST_ID) {
+            if (onMessage != null) onMessage.accept(msg);   // 자기 자신 = loopback
+            return;
+        }
+        ClientHandler ch = clients.get(playerId);
+        if (ch != null) ch.send(msg);
     }
 
-    /** 연결을 안전하게 종료. 반복 호출해도 안전. */
+    /** 호스트 전용: 모든 게스트에게 broadcast (호스트 자기 자신 제외). */
+    public synchronized void broadcast(NetMessage msg) {
+        if (msg == null || !isHost) return;
+        String line = msg.serialize();
+        for (ClientHandler ch : clients.values()) {
+            ch.sendRaw(line);
+        }
+    }
+
+    /** 호스트 전용: 한 명을 빼고 모두에게 broadcast. */
+    public synchronized void broadcastExcept(int exceptId, NetMessage msg) {
+        if (msg == null || !isHost) return;
+        String line = msg.serialize();
+        for (Map.Entry<Integer, ClientHandler> e : clients.entrySet()) {
+            if (e.getKey() == exceptId) continue;
+            e.getValue().sendRaw(line);
+        }
+    }
+
+    // ── 종료 ──────────────────────────────────────────────
     public synchronized void close() {
-        if (!running && socket == null && serverSocket == null) return;
-        boolean wasRunning = running;
+        if (!running) return;
         running = false;
 
-        // 정상 종료 알림 시도 (실패해도 무시)
-        try {
-            if (out != null && wasRunning) {
-                out.println(new NetMessage(NetMessage.Type.DISCONNECT).serialize());
-            }
-        } catch (Exception ignore) {}
-
-        try { if (in  != null) in.close();  } catch (Exception ignore) {}
-        try { if (out != null) out.close(); } catch (Exception ignore) {}
-        try { if (socket       != null) socket.close();       } catch (Exception ignore) {}
-        try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignore) {}
-
-        socket = null;
-        serverSocket = null;
+        if (isHost) {
+            try { broadcast(new NetMessage(NetMessage.Type.DISCONNECT)); } catch (Exception ignore) {}
+            for (ClientHandler ch : new java.util.ArrayList<>(clients.values())) ch.close();
+            clients.clear();
+            try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignore) {}
+            serverSocket = null;
+        } else {
+            try { if (guestOut != null) guestOut.println(new NetMessage(NetMessage.Type.DISCONNECT).serialize()); } catch (Exception ignore) {}
+            try { if (guestIn  != null) guestIn.close();  } catch (Exception ignore) {}
+            try { if (guestOut != null) guestOut.close(); } catch (Exception ignore) {}
+            try { if (guestSocket != null) guestSocket.close(); } catch (Exception ignore) {}
+            guestSocket = null;
+        }
     }
 
-    private void fireConnect()    { if (onConnect    != null) onConnect.run();    }
-    private void fireDisconnect() { if (onDisconnect != null) onDisconnect.run(); }
-
-    // ── 로컬 IP 조회(안내용) ───────────────────────────────
-    /**
-     * LAN에서 외부 PC가 접속할 수 있는 IPv4 주소를 찾는다.
-     * loopback(127.x), 가상 인터페이스, IPv6는 제외하고
-     * 사설 IP 대역(192.168.x, 10.x, 172.16~31.x)을 우선 반환한다.
-     */
+    // ── 로컬 IP (안내용) ──────────────────────────────────
     public static String getLocalIP() {
         String fallback = "127.0.0.1";
         try {
@@ -173,5 +258,62 @@ public class NetworkManager {
             }
         } catch (Exception ignore) {}
         return fallback;
+    }
+
+    // ─────────────────────────────────────────────────────
+    // 내부 클래스: 호스트가 관리하는 클라이언트
+    // ─────────────────────────────────────────────────────
+    private class ClientHandler {
+        final int            id;
+        final Socket         socket;
+        BufferedReader       in;
+        PrintWriter          out;
+        Thread               receiveThread;
+        volatile boolean     alive;
+
+        ClientHandler(int id, Socket socket) throws IOException {
+            this.id     = id;
+            this.socket = socket;
+            socket.setTcpNoDelay(true);
+            in  = new BufferedReader(new InputStreamReader(socket.getInputStream(),  StandardCharsets.UTF_8));
+            out = new PrintWriter   (new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
+            alive = true;
+        }
+
+        void start() {
+            receiveThread = new Thread(() -> {
+                try {
+                    String line;
+                    while (alive && (line = in.readLine()) != null) {
+                        NetMessage msg = NetMessage.deserialize(line);
+                        if (msg == null) continue;
+                        if (msg.type == NetMessage.Type.DISCONNECT) break;
+                        // from이 비어 있으면 자동 보정
+                        if (msg.get("from") == null) msg.put("from", id);
+                        if (onMessage != null) onMessage.accept(msg);
+                    }
+                } catch (IOException e) {
+                    if (alive) System.err.println("[Net] Host recv from " + id + ": " + e.getMessage());
+                } finally {
+                    alive = false;
+                    clients.remove(id);
+                    try { socket.close(); } catch (Exception ignore) {}
+                    if (onClientDisconnect != null) onClientDisconnect.accept(id);
+                }
+            }, "Net-Host-Recv-" + id);
+            receiveThread.setDaemon(true);
+            receiveThread.start();
+        }
+
+        void send(NetMessage msg)  { sendRaw(msg.serialize()); }
+        void sendRaw(String line)  { if (alive && out != null) out.println(line); }
+
+        void close() {
+            alive = false;
+            try { if (out != null) out.println(new NetMessage(NetMessage.Type.DISCONNECT).serialize()); } catch (Exception ignore) {}
+            try { if (in  != null) in.close();  } catch (Exception ignore) {}
+            try { if (out != null) out.close(); } catch (Exception ignore) {}
+            try { socket.close(); } catch (Exception ignore) {}
+        }
     }
 }
