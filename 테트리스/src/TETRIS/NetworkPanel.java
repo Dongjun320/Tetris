@@ -98,7 +98,9 @@ public class NetworkPanel extends JPanel implements KeyListener {
     private Timer       timer;
     private long        lastDrop    = 0;
     private long        lastNetSend = 0;
+    private long        lockStartTime = 0;             // 바닥 닿은 시각(0=공중)
     private static final long NET_INTERVAL = 50;       // 20Hz
+    private static final long LOCK_DELAY_MS = 500;     // 바닥 닿고 고정되기까지 유예
 
     // ── 게임 종료/랭킹 ─────────────────────────────────────
     private boolean gameOver = false;
@@ -221,6 +223,8 @@ public class NetworkPanel extends JPanel implements KeyListener {
         current = next;
         next = bag.nextPiece();
         canHold = true; lastRot = false;
+        lockStartTime = 0;
+        lastDrop = System.currentTimeMillis();
         if (!board.isValidPosition(current)) {
             handleMyDeath();
         }
@@ -261,10 +265,25 @@ public class NetworkPanel extends JPanel implements KeyListener {
             }
         }
 
-        // 내 자동 낙하
-        if (alive && now - lastDrop >= getSpeed()) {
-            lastDrop = now;
-            tickDown();
+        // 내 자동 낙하 + lock delay
+        if (alive) {
+            if (isOnGround()) {
+                if (lockStartTime == 0) lockStartTime = now;
+                if (now - lockStartTime >= LOCK_DELAY_MS) {
+                    land();
+                    lockStartTime = 0;
+                }
+            } else {
+                lockStartTime = 0;
+                if (now - lastDrop >= getSpeed()) {
+                    lastDrop = now;
+                    current.moveDown();
+                    if (!board.isValidPosition(current)) {
+                        current.setY(current.getY() - 1);
+                        // 바닥에 닿음 → 다음 tick에서 lock 시작 (즉시 land 하지 않음)
+                    }
+                }
+            }
         }
 
         // 주기적 상태 송신
@@ -275,11 +294,22 @@ public class NetworkPanel extends JPanel implements KeyListener {
         repaint();
     }
 
-    private void tickDown() {
+    /** 현재 피스가 바닥에 닿아 있는지(한 칸 더 못 내려가는지) */
+    private boolean isOnGround() {
+        if (current == null) return false;
         current.moveDown();
-        if (!board.isValidPosition(current)) {
-            current.setY(current.getY() - 1);
-            land();
+        boolean grounded = !board.isValidPosition(current);
+        current.setY(current.getY() - 1);
+        return grounded;
+    }
+
+    /** 이동/회전 후 호출. 공중이면 lock 해제, 바닥이면 lock 타이머 리셋(=유예 갱신). */
+    private void refreshLock() {
+        if (current == null) return;
+        if (isOnGround()) {
+            lockStartTime = System.currentTimeMillis();
+        } else {
+            lockStartTime = 0;
         }
     }
 
@@ -360,11 +390,21 @@ public class NetworkPanel extends JPanel implements KeyListener {
     @Override public void keyReleased(KeyEvent e) {}
     @Override public void keyTyped(KeyEvent e) {}
 
-    private void ml()  { current.moveLeft();  if (!board.isValidPosition(current)) current.moveRight(); lastRot = false; }
-    private void mr()  { current.moveRight(); if (!board.isValidPosition(current)) current.moveLeft();  lastRot = false; }
-    private void rot() { if (board.tryRotate(current) != null) lastRot = true; }
-    private void sd()  { current.moveDown(); if (!board.isValidPosition(current)) { current.setY(current.getY()-1); land(); } }
-    private void hd()  { while (board.isValidPosition(current)) current.moveDown(); current.setY(current.getY()-1); land(); }
+    private void ml()  { current.moveLeft();  if (!board.isValidPosition(current)) current.moveRight(); lastRot = false; refreshLock(); }
+    private void mr()  { current.moveRight(); if (!board.isValidPosition(current)) current.moveLeft();  lastRot = false; refreshLock(); }
+    private void rot() { if (board.tryRotate(current) != null) { lastRot = true; refreshLock(); } }
+    private void sd()  {
+        // 소프트 드롭: 한 칸 내려가되 바닥이면 즉시 고정하지 않고 lock delay 적용
+        current.moveDown();
+        if (!board.isValidPosition(current)) {
+            current.setY(current.getY() - 1);
+            refreshLock();         // 바닥 → lock 시작
+        } else {
+            lockStartTime = 0;      // 한 칸 내려갔으면 공중이므로 lock 해제
+            lastDrop = System.currentTimeMillis();
+        }
+    }
+    private void hd()  { while (board.isValidPosition(current)) current.moveDown(); current.setY(current.getY()-1); land(); lockStartTime = 0; }
     private void doHold() {
         if (!canHold) return;
         canHold = false; lastRot = false;

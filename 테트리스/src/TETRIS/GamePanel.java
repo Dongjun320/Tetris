@@ -24,6 +24,9 @@ public class GamePanel extends JPanel implements KeyListener {
     private Timer       timer;
     private Runnable    backCallback;       // ESC 시 홈으로 돌아가기
     private final PieceBag bag = new PieceBag();   // 7-bag 무작위기
+    private long lastDrop      = 0;          // 마지막 자동 낙하 시각
+    private long lockStartTime = 0;          // 바닥 닿은 시각 (0=공중)
+    private static final long LOCK_DELAY_MS = 500;
 
     // ── 초기화 ────────────────────────────────────
     public GamePanel() {
@@ -34,7 +37,7 @@ public class GamePanel extends JPanel implements KeyListener {
 
         board = new Board();
         gm    = GameManager.getInstance();
-        timer = new Timer(gm.getSpeed(), e -> tick());
+        timer = new Timer(16, e -> tick());     // 60Hz로 호출, 내부에서 lastDrop으로 낙하 관리
     }
 
     public void startGame() {
@@ -46,8 +49,9 @@ public class GamePanel extends JPanel implements KeyListener {
         tSpinMsg              = "";
         bag.reset();
         next = bag.nextPiece();
+        lastDrop              = System.currentTimeMillis();
+        lockStartTime         = 0;
         spawnPiece();
-        timer.setDelay(gm.getSpeed());
         timer.start();
         requestFocusInWindow();
     }
@@ -57,6 +61,8 @@ public class GamePanel extends JPanel implements KeyListener {
         next                  = bag.nextPiece();
         canHold               = true;
         lastActionWasRotation = false;
+        lockStartTime         = 0;
+        lastDrop              = System.currentTimeMillis();
         if (!board.isValidPosition(current)) {
             gm.setGameOver(true);
             timer.stop();
@@ -66,12 +72,38 @@ public class GamePanel extends JPanel implements KeyListener {
     // ── 게임 루프 ─────────────────────────────────
     private void tick() {
         if (gm.isGameOver() || gm.isPaused()) return;
-        current.moveDown();
-        if (!board.isValidPosition(current)) {
-            current.setY(current.getY() - 1);
-            land();
+        long now = System.currentTimeMillis();
+
+        if (isOnGround()) {
+            if (lockStartTime == 0) lockStartTime = now;
+            if (now - lockStartTime >= LOCK_DELAY_MS) {
+                land();
+                lockStartTime = 0;
+            }
+        } else {
+            lockStartTime = 0;
+            if (now - lastDrop >= gm.getSpeed()) {
+                lastDrop = now;
+                current.moveDown();
+                if (!board.isValidPosition(current)) {
+                    current.setY(current.getY() - 1);
+                    // 바닥 닿음 — 다음 tick에서 lock 시작
+                }
+            }
         }
         repaint();
+    }
+
+    private boolean isOnGround() {
+        current.moveDown();
+        boolean grounded = !board.isValidPosition(current);
+        current.setY(current.getY() - 1);
+        return grounded;
+    }
+
+    private void refreshLock() {
+        if (isOnGround()) lockStartTime = System.currentTimeMillis();
+        else              lockStartTime = 0;
     }
 
     private void land() {
@@ -80,7 +112,6 @@ public class GamePanel extends JPanel implements KeyListener {
         board.placePiece(current);
         int lines = board.clearLines();
         gm.addScore(lines, tSpin);
-        timer.setDelay(gm.getSpeed());
         spawnPiece();
     }
 
@@ -118,6 +149,7 @@ public class GamePanel extends JPanel implements KeyListener {
         current.moveLeft();
         if (!board.isValidPosition(current)) current.moveRight();
         lastActionWasRotation = false;  // 이동 시 T-스핀 판정 리셋
+        refreshLock();
         repaint();
     }
 
@@ -125,12 +157,16 @@ public class GamePanel extends JPanel implements KeyListener {
         current.moveRight();
         if (!board.isValidPosition(current)) current.moveLeft();
         lastActionWasRotation = false;
+        refreshLock();
         repaint();
     }
 
     private void rotate() {
         int[] kick = board.tryRotate(current);  // SRS 벽 차기 포함 회전
-        if (kick != null) lastActionWasRotation = true;
+        if (kick != null) {
+            lastActionWasRotation = true;
+            refreshLock();
+        }
         repaint();
     }
 
@@ -138,7 +174,10 @@ public class GamePanel extends JPanel implements KeyListener {
         current.moveDown();
         if (!board.isValidPosition(current)) {
             current.setY(current.getY() - 1);
-            land();
+            refreshLock();          // 바닥 → lock 시작 (즉시 land 안 함)
+        } else {
+            lockStartTime = 0;
+            lastDrop = System.currentTimeMillis();
         }
         repaint();
     }
@@ -147,6 +186,7 @@ public class GamePanel extends JPanel implements KeyListener {
         while (board.isValidPosition(current)) current.moveDown();
         current.setY(current.getY() - 1);
         land();
+        lockStartTime = 0;
         repaint();
     }
 

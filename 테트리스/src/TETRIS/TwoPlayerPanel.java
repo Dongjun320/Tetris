@@ -33,6 +33,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         String    tMsg = "";
         int       delayedGarbage = 0;        // 지연 중인 쓰레기
         long      garbageTime = 0;           // 쓰레기 받은 시간
+        long      lockStartTime = 0;         // 바닥 닿은 시각 (0=공중)
         final PieceBag bag = new PieceBag(); // 7-bag (플레이어마다 독립)
 
         void reset() {
@@ -40,6 +41,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             canHold = true; lastRot = false; alive = true;
             score = 0; level = 1; lines = 0; pending = 0; tMsg = "";
             delayedGarbage = 0; garbageTime = 0;
+            lockStartTime = 0;
             hold = null;
             bag.reset();
             next = bag.nextPiece();
@@ -53,6 +55,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             current = next;
             next = bag.nextPiece();
             canHold = true; lastRot = false;
+            lockStartTime = 0;
             if (!board.isValidPosition(current)) alive = false;
         }
 
@@ -122,6 +125,8 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     }
 
     // ── 게임 루프 ─────────────────────────────────
+    private static final long LOCK_DELAY_MS = 500;     // 바닥 닿고 고정까지 유예
+
     private void gameTick() {
         if (gameOver) { repaint(); return; }
         long now = System.currentTimeMillis();
@@ -132,23 +137,49 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
                 p1.board.addGarbageLine((int)(Math.random() * Board.COLS));
             p1.delayedGarbage = 0;
         }
-        if (p2.delayedGarbage > 0 && now - p2.garbageTime >= 3000) {
+        if (p2.delayedGarbage > 0 && now - p2.garbageTime >= 2000) {
             for (int i = 0; i < p2.delayedGarbage; i++)
                 p2.board.addGarbageLine((int)(Math.random() * Board.COLS));
             p2.delayedGarbage = 0;
         }
 
-        if (p1.alive && now - t1 >= p1.getSpeed()) { t1 = now; tickPlayer(p1, p2); }
-        if (p2.alive && now - t2 >= p2.getSpeed()) { t2 = now; tickPlayer(p2, p1); }
+        if (p1.alive) tickPlayer(p1, p2, now);
+        if (p2.alive) tickPlayer(p2, p1, now);
         repaint();
     }
 
-    private void tickPlayer(PlayerState p, PlayerState opp) {
-        p.current.moveDown();
-        if (!p.board.isValidPosition(p.current)) {
-            p.current.setY(p.current.getY() - 1);
-            land(p, opp);
+    /** 플레이어 1명 진행: lock delay + 자동 낙하 */
+    private void tickPlayer(PlayerState p, PlayerState opp, long now) {
+        if (isOnGround(p)) {
+            if (p.lockStartTime == 0) p.lockStartTime = now;
+            if (now - p.lockStartTime >= LOCK_DELAY_MS) {
+                land(p, opp);
+                p.lockStartTime = 0;
+            }
+        } else {
+            p.lockStartTime = 0;
+            long lastDrop = (p == p1) ? t1 : t2;
+            if (now - lastDrop >= p.getSpeed()) {
+                if (p == p1) t1 = now; else t2 = now;
+                p.current.moveDown();
+                if (!p.board.isValidPosition(p.current)) {
+                    p.current.setY(p.current.getY() - 1);
+                    // 바닥 닿음 — 다음 tick에서 lock 시작
+                }
+            }
         }
+    }
+
+    private boolean isOnGround(PlayerState p) {
+        p.current.moveDown();
+        boolean grounded = !p.board.isValidPosition(p.current);
+        p.current.setY(p.current.getY() - 1);
+        return grounded;
+    }
+
+    private void refreshLock(PlayerState p) {
+        if (isOnGround(p)) p.lockStartTime = System.currentTimeMillis();
+        else                p.lockStartTime = 0;
     }
 
     private void land(PlayerState p, PlayerState opp) {
@@ -181,11 +212,20 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     }
 
     // ── 개별 조작 ─────────────────────────────────
-    private void ml(PlayerState p)          { p.current.moveLeft();  if (!p.board.isValidPosition(p.current)) p.current.moveRight(); p.lastRot=false; }
-    private void mr(PlayerState p)          { p.current.moveRight(); if (!p.board.isValidPosition(p.current)) p.current.moveLeft();  p.lastRot=false; }
-    private void rot(PlayerState p)         { if (p.board.tryRotate(p.current)!=null) p.lastRot=true; }
-    private void sd(PlayerState p, PlayerState o) { p.current.moveDown(); if (!p.board.isValidPosition(p.current)) { p.current.setY(p.current.getY()-1); land(p,o); } }
-    private void hd(PlayerState p, PlayerState o) { while (p.board.isValidPosition(p.current)) p.current.moveDown(); p.current.setY(p.current.getY()-1); land(p,o); }
+    private void ml(PlayerState p)          { p.current.moveLeft();  if (!p.board.isValidPosition(p.current)) p.current.moveRight(); p.lastRot=false; refreshLock(p); }
+    private void mr(PlayerState p)          { p.current.moveRight(); if (!p.board.isValidPosition(p.current)) p.current.moveLeft();  p.lastRot=false; refreshLock(p); }
+    private void rot(PlayerState p)         { if (p.board.tryRotate(p.current)!=null) { p.lastRot=true; refreshLock(p); } }
+    private void sd(PlayerState p, PlayerState o) {
+        p.current.moveDown();
+        if (!p.board.isValidPosition(p.current)) {
+            p.current.setY(p.current.getY()-1);
+            refreshLock(p);          // 바닥 → lock 시작 (즉시 land 안 함)
+        } else {
+            p.lockStartTime = 0;
+            if (p == p1) t1 = System.currentTimeMillis(); else t2 = System.currentTimeMillis();
+        }
+    }
+    private void hd(PlayerState p, PlayerState o) { while (p.board.isValidPosition(p.current)) p.current.moveDown(); p.current.setY(p.current.getY()-1); land(p,o); p.lockStartTime = 0; }
     private void hold(PlayerState p) {
         p.swapHold();
         if (!p.alive) { gameOver=true; winner=(p==p1)?2:1; timer.stop(); }
