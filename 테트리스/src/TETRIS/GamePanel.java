@@ -23,6 +23,7 @@ public class GamePanel extends JPanel implements KeyListener {
     private GameManager gm;
     private Timer       timer;
     private Runnable    backCallback;       // ESC 시 홈으로 돌아가기
+    private final PieceBag bag = new PieceBag();   // 7-bag 무작위기
 
     // ── 초기화 ────────────────────────────────────
     public GamePanel() {
@@ -43,7 +44,8 @@ public class GamePanel extends JPanel implements KeyListener {
         canHold               = true;
         lastActionWasRotation = false;
         tSpinMsg              = "";
-        next = Tetromino.createRandom();
+        bag.reset();
+        next = bag.nextPiece();
         spawnPiece();
         timer.setDelay(gm.getSpeed());
         timer.start();
@@ -52,7 +54,7 @@ public class GamePanel extends JPanel implements KeyListener {
 
     private void spawnPiece() {
         current               = next;
-        next                  = Tetromino.createRandom();
+        next                  = bag.nextPiece();
         canHold               = true;
         lastActionWasRotation = false;
         if (!board.isValidPosition(current)) {

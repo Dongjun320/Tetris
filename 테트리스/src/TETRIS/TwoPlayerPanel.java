@@ -33,6 +33,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         String    tMsg = "";
         int       delayedGarbage = 0;        // 지연 중인 쓰레기
         long      garbageTime = 0;           // 쓰레기 받은 시간
+        final PieceBag bag = new PieceBag(); // 7-bag (플레이어마다 독립)
 
         void reset() {
             board.clear();
@@ -40,7 +41,8 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             score = 0; level = 1; lines = 0; pending = 0; tMsg = "";
             delayedGarbage = 0; garbageTime = 0;
             hold = null;
-            next = Tetromino.createRandom();
+            bag.reset();
+            next = bag.nextPiece();
         }
 
         /** 쓰레기 적용 후 다음 큐에서 스폰 */
@@ -49,7 +51,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
                 board.addGarbageLine((int)(Math.random() * Board.COLS));
             pending = 0;
             current = next;
-            next = Tetromino.createRandom();
+            next = bag.nextPiece();
             canHold = true; lastRot = false;
             if (!board.isValidPosition(current)) alive = false;
         }

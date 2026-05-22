@@ -89,6 +89,13 @@ public class NetworkPanel extends JPanel implements KeyListener {
     private String          endMessage = "";
     private Runnable        backCallback;        // 홈으로 (연결 종료)
     private Runnable        toRoomCallback;      // 방으로 복귀
+    private final PieceBag  bag = new PieceBag();   // 7-bag 무작위기
+
+    // ── 시작 카운트다운 ───────────────────────────────────
+    private static final long COUNTDOWN_MS = 3000;  // 3초
+    private boolean inCountdown = false;
+    private long    countdownEnd = 0;
+    private Timer   countdownTimer;
 
     private static final long NET_INTERVAL = 50;   // 20Hz로 상태 송신
 
@@ -121,7 +128,8 @@ public class NetworkPanel extends JPanel implements KeyListener {
         score = 0; level = 1; lines = 0; tMsg = "";
         delayedGarbage = 0; garbageTime = 0;
         hold = null;
-        next = Tetromino.createRandom();
+        bag.reset();
+        next = bag.nextPiece();
         spawnMe();
         // 상대 상태 초기화
         for (int[] row : oppBoard) java.util.Arrays.fill(row, 0);
@@ -131,15 +139,35 @@ public class NetworkPanel extends JPanel implements KeyListener {
 
         lastDrop    = System.currentTimeMillis();
         lastNetSend = 0;
-        timer.restart();
+        // 게임 타이머는 카운트다운 끝난 후 시작
+        timer.stop();
+        startCountdown();
         requestFocusInWindow();
     }
 
+    /** 게임 시작 전 3초 카운트다운 (양쪽 PC가 각자 자기 시간으로 카운트). */
+    private void startCountdown() {
+        inCountdown = true;
+        countdownEnd = System.currentTimeMillis() + COUNTDOWN_MS;
+
+        if (countdownTimer != null && countdownTimer.isRunning()) countdownTimer.stop();
+        countdownTimer = new Timer(50, e -> {
+            if (System.currentTimeMillis() >= countdownEnd) {
+                inCountdown = false;
+                ((Timer) e.getSource()).stop();
+                // 카운트다운 끝 → 게임 본격 시작
+                lastDrop    = System.currentTimeMillis();
+                lastNetSend = 0;
+                timer.restart();
+            }
+            repaint();
+        });
+        countdownTimer.start();
+    }
+
     private void spawnMe() {
-        // 받은 가비지 적용
-        for (int i = 0; i < 0; i++) {} // (사용 안 함, 호환용 자리)
         current = next;
-        next = Tetromino.createRandom();
+        next = bag.nextPiece();
         canHold = true; lastRot = false;
         if (!board.isValidPosition(current)) {
             alive = false;
@@ -249,9 +277,12 @@ public class NetworkPanel extends JPanel implements KeyListener {
         if (k == KeyEvent.VK_ESCAPE) {
             if (alive) { sendGameOver(); alive = false; }
             timer.stop();
+            if (countdownTimer != null) countdownTimer.stop();
+            inCountdown = false;
             returnToRoom();
             return;
         }
+        if (inCountdown) return;       // 카운트다운 중엔 게임 키 무시
         if (!alive) return;
         switch (k) {
             case KeyEvent.VK_A:     ml();   repaint(); break;
@@ -404,10 +435,14 @@ public class NetworkPanel extends JPanel implements KeyListener {
         winner = who;       // 1=나, 2=상대, 0=취소(끊김)
         endMessage = msg;
         timer.stop();
+        if (countdownTimer != null) countdownTimer.stop();
+        inCountdown = false;
     }
 
     private void exitGame() {
         timer.stop();
+        if (countdownTimer != null) countdownTimer.stop();
+        inCountdown = false;
         if (network != null) { network.close(); network = null; }
         if (backCallback != null) SwingUtilities.invokeLater(backCallback);
     }
@@ -415,6 +450,8 @@ public class NetworkPanel extends JPanel implements KeyListener {
     /** 게임 끝 → 방으로 복귀 (연결은 유지). 방에서 다시 준비 누르면 새 게임. */
     private void returnToRoom() {
         timer.stop();
+        if (countdownTimer != null) countdownTimer.stop();
+        inCountdown = false;
         if (toRoomCallback != null) {
             SwingUtilities.invokeLater(toRoomCallback);
         } else if (backCallback != null) {
@@ -442,7 +479,51 @@ public class NetworkPanel extends JPanel implements KeyListener {
         drawCenter(g2);
         drawBottomHint(g2);
 
-        if (gameOver) drawGameOver(g2);
+        if (inCountdown) drawCountdown(g2);
+        if (gameOver)    drawGameOver(g2);
+    }
+
+    /** 시작 카운트다운: 화면 암전 + 큰 숫자 + READY/GO 텍스트 */
+    private void drawCountdown(Graphics2D g) {
+        long remain = countdownEnd - System.currentTimeMillis();
+        if (remain < 0) remain = 0;
+
+        // 1) 전체 화면 암전
+        g.setColor(new Color(0, 0, 0, 150));
+        g.fillRect(0, 0, PANEL_W, PANEL_H);
+
+        // 2) READY 텍스트 (살짝 위)
+        g.setFont(new Font("맑은 고딕", Font.BOLD, 28));
+        FontMetrics fm = g.getFontMetrics();
+        g.setColor(new Color(200, 220, 255, 220));
+        String ready = "READY";
+        g.drawString(ready, (PANEL_W - fm.stringWidth(ready)) / 2, PANEL_H / 2 - 70);
+
+        // 3) 카운트다운 숫자 (3 → 2 → 1)
+        int sec = (int) Math.ceil(remain / 1000.0);
+        if (sec < 1) sec = 1;
+        if (sec > 3) sec = 3;
+
+        // 숫자 안에서 펄스(크기 변화) 애니메이션
+        long inSec = remain % 1000;            // 0~999
+        double progress = 1.0 - (inSec / 1000.0); // 0(시작) → 1(끝)
+        int baseSize = 140;
+        int size = (int) (baseSize + 30 * (1.0 - Math.abs(0.5 - progress) * 2)); // 부풀었다 줄어듦
+        g.setFont(new Font("맑은 고딕", Font.BOLD, size));
+        fm = g.getFontMetrics();
+        String numStr = String.valueOf(sec);
+
+        // 그림자
+        g.setColor(new Color(0, 0, 0, 180));
+        g.drawString(numStr, (PANEL_W - fm.stringWidth(numStr)) / 2 + 4,
+                     PANEL_H / 2 + 40 + 4);
+        // 본체 (남은 시간이 적을수록 빨간색에 가깝게)
+        Color c = (sec == 3) ? new Color(120, 220, 255)
+                : (sec == 2) ? new Color(255, 220, 100)
+                             : new Color(255, 130, 100);
+        g.setColor(c);
+        g.drawString(numStr, (PANEL_W - fm.stringWidth(numStr)) / 2,
+                     PANEL_H / 2 + 40);
     }
 
     private void drawPlayerLabel(Graphics2D g, String label, int bx, Color color) {
