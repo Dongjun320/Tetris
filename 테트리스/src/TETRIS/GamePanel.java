@@ -63,10 +63,7 @@ public class GamePanel extends JPanel implements KeyListener {
         lastActionWasRotation = false;
         lockStartTime         = 0;
         lastDrop              = System.currentTimeMillis();
-        if (!board.isValidPosition(current)) {
-            gm.setGameOver(true);
-            timer.stop();
-        }
+        // 스폰 위치가 겹쳐도 즉시 죽이지 않음 → land() 시점에 top-out 체크
     }
 
     // ── 게임 루프 ─────────────────────────────────
@@ -112,7 +109,14 @@ public class GamePanel extends JPanel implements KeyListener {
         board.placePiece(current);
         int lines = board.clearLines();
         gm.addScore(lines, tSpin);
-        spawnPiece();
+        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+        Tetromino testNext = Tetromino.create(next.getType());
+        if (!board.isValidPosition(testNext)) {
+            gm.setGameOver(true);
+            timer.stop();
+        } else {
+            spawnPiece();
+        }
     }
 
     // ── T-스핀 판정 ───────────────────────────────
@@ -202,10 +206,7 @@ public class GamePanel extends JPanel implements KeyListener {
             Tetromino swap = Tetromino.create(holdPiece.getType());
             holdPiece = Tetromino.create(current.getType());
             current   = swap;
-            if (!board.isValidPosition(current)) {
-                gm.setGameOver(true);
-                timer.stop();
-            }
+            // 홀드 교체 후 겹쳐도 즉시 죽이지 않음 → land 시 체크
         }
         repaint();
     }

@@ -225,9 +225,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
         canHold = true; lastRot = false;
         lockStartTime = 0;
         lastDrop = System.currentTimeMillis();
-        if (!board.isValidPosition(current)) {
-            handleMyDeath();
-        }
+        // 스폰 위치 겹침 → 즉시 죽이지 않음 (land 시 top-out 체크)
     }
 
     // ── 카운트다운 ────────────────────────────────────────
@@ -258,11 +256,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
             for (int i = 0; i < delayedGarbage; i++)
                 board.addGarbageLine((int)(Math.random() * Board.COLS));
             delayedGarbage = 0;
-            if (current != null && !board.isValidPosition(current)) {
-                handleMyDeath();
-                repaint();
-                return;
-            }
+            // 가비지 추가 후 즉시 죽이지 않음 → 다음 land 시 top-out 체크
         }
 
         // 내 자동 낙하 + lock delay
@@ -321,7 +315,13 @@ public class NetworkPanel extends JPanel implements KeyListener {
         addScore(cl, ts);
         int gb = calcGarbage(cl, ts);
         if (gb > 0) sendGarbageRandom(gb);
-        spawnMe();
+        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+        Tetromino testNext = Tetromino.create(next.getType());
+        if (!board.isValidPosition(testNext)) {
+            handleMyDeath();
+        } else {
+            spawnMe();
+        }
     }
 
     private long getSpeed() { return Math.max(100, 1000 - (level - 1) * 90); }
@@ -368,7 +368,11 @@ public class NetworkPanel extends JPanel implements KeyListener {
             return;
         }
         if (k == KeyEvent.VK_ESCAPE) {
-            // 항복
+            if (!alive && !gameOver) {
+                // 죽었지만 아직 랭킹 대기 중 → ESC 무시 (랭킹 화면 기다리기)
+                return;
+            }
+            // 항복 또는 게임 중 나가기
             if (alive) handleMyDeath();
             timer.stop();
             if (countdownTimer != null) countdownTimer.stop();
@@ -415,7 +419,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
             Tetromino tmp = Tetromino.create(hold.getType());
             hold    = Tetromino.create(current.getType());
             current = tmp;
-            if (!board.isValidPosition(current)) handleMyDeath();
+            // 홀드 교체 후 겹침 허용 → land 시 top-out 체크
         }
     }
 
@@ -458,6 +462,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
     /** 호스트 전용: 살아있는 사람 1명만 남으면 RANKING broadcast + finishGame */
     private void checkGameEnd() {
         if (!isHost) return;
+        if (gameOver) return;  // 중복 실행 방지
         int totalPlayers = names.size();
         // 살아있는 사람 수
         int aliveCount = 0;
@@ -488,6 +493,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
     }
 
     private void applyRanking(List<Integer> rank) {
+        if (gameOver) return;  // 이미 랭킹이 확정됐으면 덮어쓰지 않음
         this.ranking = new ArrayList<>(rank);
         gameOver = true;
         timer.stop();
@@ -575,6 +581,7 @@ public class NetworkPanel extends JPanel implements KeyListener {
 
     private void handleGameOver(NetMessage msg) {
         if (!isHost) return;             // 호스트만 처리
+        if (gameOver) return;            // 이미 게임 끝났으면 늦게 온 메시지 무시
         int from = msg.getInt("from", 0);
         if (from <= 0) return;
         registerElimination(from);
@@ -772,11 +779,20 @@ public class NetworkPanel extends JPanel implements KeyListener {
         if (!alive) {
             g.setColor(new Color(0, 0, 0, 120));
             g.fillRect(bx, BY, BOARD_W, BOARD_H);
+            FontMetrics fm;
             g.setFont(new Font("맑은 고딕", Font.BOLD, 32));
             g.setColor(new Color(220, 70, 70));
-            FontMetrics fm = g.getFontMetrics();
+            fm = g.getFontMetrics();
             String s = "DEAD";
-            g.drawString(s, bx + (BOARD_W - fm.stringWidth(s))/2, BY + BOARD_H/2);
+            g.drawString(s, bx + (BOARD_W - fm.stringWidth(s))/2, BY + BOARD_H/2 - 20);
+            // 랭킹 대기 중 안내
+            if (!gameOver) {
+                g.setFont(new Font("맑은 고딕", Font.PLAIN, 13));
+                g.setColor(new Color(200, 200, 200));
+                fm = g.getFontMetrics();
+                String wait = "랭킹 대기 중...";
+                g.drawString(wait, bx + (BOARD_W - fm.stringWidth(wait))/2, BY + BOARD_H/2 + 20);
+            }
         }
     }
 

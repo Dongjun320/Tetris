@@ -56,7 +56,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             next = bag.nextPiece();
             canHold = true; lastRot = false;
             lockStartTime = 0;
-            if (!board.isValidPosition(current)) alive = false;
+            // 스폰 위치 겹침 → 즉시 죽이지 않음 (land 시 top-out 체크)
         }
 
         /** 홀드 교체 (쓰레기는 적용 안 함) */
@@ -70,7 +70,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
                 Tetromino tmp = Tetromino.create(hold.getType());
                 hold    = Tetromino.create(current.getType());
                 current = tmp;
-                if (!board.isValidPosition(current)) alive = false;
+                // 홀드 교체 후 겹침 허용 → land 시 top-out 체크
             }
         }
 
@@ -189,13 +189,20 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         int cl = p.board.clearLines();
         p.addScore(cl, ts);
         int gb = p.calcGarbage(cl, ts);
-        // 상대에게 3초 지연 후 쓰레기 추가
         if (gb > 0) {
             opp.delayedGarbage = gb;
             opp.garbageTime = System.currentTimeMillis();
         }
-        p.spawn();
-        if (!p.alive) { gameOver = true; winner = (p == p1) ? 2 : 1; timer.stop(); }
+        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+        Tetromino testNext = Tetromino.create(p.next.getType());
+        if (!p.board.isValidPosition(testNext)) {
+            p.alive = false;
+            gameOver = true;
+            winner = (p == p1) ? 2 : 1;
+            timer.stop();
+        } else {
+            p.spawn();
+        }
     }
 
     // ── T-스핀 ────────────────────────────────────
@@ -228,7 +235,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     private void hd(PlayerState p, PlayerState o) { while (p.board.isValidPosition(p.current)) p.current.moveDown(); p.current.setY(p.current.getY()-1); land(p,o); p.lockStartTime = 0; }
     private void hold(PlayerState p) {
         p.swapHold();
-        if (!p.alive) { gameOver=true; winner=(p==p1)?2:1; timer.stop(); }
+        // alive 체크는 land()에서 top-out 판정 시 수행
     }
 
     // ── 키 이벤트 ─────────────────────────────────
