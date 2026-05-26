@@ -98,9 +98,21 @@ public class NetworkPanel extends JPanel implements KeyListener {
     private Timer       timer;
     private long        lastDrop    = 0;
     private long        lastNetSend = 0;
-    private long        lockStartTime = 0;             // 바닥 닿은 시각(0=공중)
-    private static final long NET_INTERVAL = 50;       // 20Hz
-    private static final long LOCK_DELAY_MS = 500;     // 바닥 닿고 고정되기까지 유예
+    private long        lockStartTime = 0;
+    private static final long NET_INTERVAL  = 50;
+    private static final long LOCK_DELAY_MS = 500;
+
+    // ── 이펙트 ──────────────────────────────────────────
+    private int[]       clearFlashRows = new int[0];
+    private long        clearFlashTime = 0;
+    private static final long CLEAR_FLASH_MS = 140;
+    private List<int[]> dropTrail      = new ArrayList<>();
+    private Color       dropTrailColor = null;
+    private long        dropTrailTime  = 0;
+    private static final long DROP_TRAIL_MS = 150;
+    private List<int[]> lockFlash      = new ArrayList<>();
+    private long        lockFlashTime  = 0;
+    private static final long LOCK_FLASH_MS = 100;
 
     // ── 게임 종료/랭킹 ─────────────────────────────────────
     private boolean gameOver = false;
@@ -310,18 +322,29 @@ public class NetworkPanel extends JPanel implements KeyListener {
     private void land() {
         boolean ts = isTSpin();
         tMsg = ts ? "T-SPIN!" : "";
+
+        // [이펙트] 고정 플래시
+        lockFlash.clear();
+        for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
+            if (current.getShape()[r][c] == 1 && current.getY()+r >= 0)
+                lockFlash.add(new int[]{current.getY()+r, current.getX()+c});
+        }
+        lockFlashTime = System.currentTimeMillis();
+
         board.placePiece(current);
+
+        // [이펙트] 라인 플래시
+        int[] fullRows = board.getFullRowIndices();
+        if (fullRows.length > 0) { clearFlashRows = fullRows; clearFlashTime = System.currentTimeMillis(); }
+
         int cl = board.clearLines();
         addScore(cl, ts);
         int gb = calcGarbage(cl, ts);
         if (gb > 0) sendGarbageRandom(gb);
-        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+
         Tetromino testNext = Tetromino.create(next.getType());
-        if (!board.isValidPosition(testNext)) {
-            handleMyDeath();
-        } else {
-            spawnMe();
-        }
+        if (!board.isValidPosition(testNext)) { handleMyDeath(); }
+        else { spawnMe(); }
     }
 
     private long getSpeed() { return Math.max(100, 1000 - (level - 1) * 90); }
@@ -408,7 +431,24 @@ public class NetworkPanel extends JPanel implements KeyListener {
             lastDrop = System.currentTimeMillis();
         }
     }
-    private void hd()  { while (board.isValidPosition(current)) current.moveDown(); current.setY(current.getY()-1); land(); lockStartTime = 0; }
+    private void hd() {
+        // [이펙트] 잔상
+        dropTrail.clear();
+        dropTrailColor = current.getColor();
+        int startY = current.getY();
+        int[][] shape = current.getShape();
+        Tetromino ghost = current.cloneAt(current.getX(), current.getY());
+        while (board.isValidPosition(ghost)) ghost.moveDown();
+        ghost.setY(ghost.getY() - 1);
+        int endY = ghost.getY();
+        for (int dy = startY; dy < endY; dy++)
+            for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++)
+                if (shape[r][c] == 1 && dy+r >= 0)
+                    dropTrail.add(new int[]{dy+r, current.getX()+c});
+        dropTrailTime = System.currentTimeMillis();
+        while (board.isValidPosition(current)) current.moveDown();
+        current.setY(current.getY()-1); land(); lockStartTime = 0;
+    }
     private void doHold() {
         if (!canHold) return;
         canHold = false; lastRot = false;
@@ -775,6 +815,41 @@ public class NetworkPanel extends JPanel implements KeyListener {
             FontMetrics fm = g.getFontMetrics();
             g.drawString(tMsg, bx + (BOARD_W - fm.stringWidth(tMsg))/2, BY + BOARD_H/2 - 10);
         }
+
+        // ── 이펙트 오버레이 ──
+        if (alive) {
+            long now = System.currentTimeMillis();
+            if (dropTrailColor != null && !dropTrail.isEmpty()) {
+                long el = now - dropTrailTime;
+                if (el < DROP_TRAIL_MS) {
+                    float a = 0.5f * (1f - (float)el/DROP_TRAIL_MS);
+                    Color tc = new Color(dropTrailColor.getRed(), dropTrailColor.getGreen(),
+                            dropTrailColor.getBlue(), (int)(a*255));
+                    g.setColor(tc);
+                    for (int[] cell : dropTrail)
+                        g.fillRect(bx+cell[1]*CELL+1, BY+cell[0]*CELL+1, CELL-2, CELL-2);
+                } else { dropTrail.clear(); }
+            }
+            if (!lockFlash.isEmpty()) {
+                long el = now - lockFlashTime;
+                if (el < LOCK_FLASH_MS) {
+                    float a = 0.65f * (1f - (float)el/LOCK_FLASH_MS);
+                    g.setColor(new Color(1f,1f,1f,a));
+                    for (int[] cell : lockFlash)
+                        g.fillRect(bx+cell[1]*CELL, BY+cell[0]*CELL, CELL, CELL);
+                } else { lockFlash.clear(); }
+            }
+            if (clearFlashRows.length > 0) {
+                long el = now - clearFlashTime;
+                if (el < CLEAR_FLASH_MS) {
+                    float a = 0.88f * (1f - (float)el/CLEAR_FLASH_MS);
+                    g.setColor(new Color(1f,1f,1f,a));
+                    for (int row : clearFlashRows)
+                        g.fillRect(bx, BY+row*CELL, BOARD_W, CELL);
+                } else { clearFlashRows = new int[0]; }
+            }
+        }
+
         // 내가 죽었으면 어둡게
         if (!alive) {
             g.setColor(new Color(0, 0, 0, 120));
@@ -1112,10 +1187,13 @@ public class NetworkPanel extends JPanel implements KeyListener {
         g.setColor(color);
         g.fillRect(x+1, y+1, size-2, size-2);
         if (size >= 14) {
+            // 상단 광택
+            g.setColor(new Color(255, 255, 255, 50));
+            g.fillRect(x+2, y+2, size-4, (size-2)/2);
             g.setColor(color.brighter());
             g.drawLine(x+1, y+1, x+size-2, y+1);
             g.drawLine(x+1, y+1, x+1, y+size-2);
-            g.setColor(color.darker());
+            g.setColor(color.darker().darker());
             g.drawLine(x+size-2, y+1, x+size-2, y+size-2);
             g.drawLine(x+1, y+size-2, x+size-2, y+size-2);
         }

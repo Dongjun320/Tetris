@@ -2,6 +2,8 @@ package TETRIS;
 
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.*;
 
 public class GamePanel extends JPanel implements KeyListener {
@@ -24,9 +26,23 @@ public class GamePanel extends JPanel implements KeyListener {
     private Timer       timer;
     private Runnable    backCallback;       // ESC 시 홈으로 돌아가기
     private final PieceBag bag = new PieceBag();   // 7-bag 무작위기
-    private long lastDrop      = 0;          // 마지막 자동 낙하 시각
-    private long lockStartTime = 0;          // 바닥 닿은 시각 (0=공중)
+    private long lastDrop      = 0;
+    private long lockStartTime = 0;
     private static final long LOCK_DELAY_MS = 500;
+
+    // ── 이펙트 ────────────────────────────────────
+    private int[]       clearFlashRows = new int[0];   // 라인 클리어 플래시
+    private long        clearFlashTime = 0;
+    private static final long CLEAR_FLASH_MS = 140;
+
+    private List<int[]> dropTrail      = new ArrayList<>();  // 하드드롭 잔상
+    private Color       dropTrailColor = null;
+    private long        dropTrailTime  = 0;
+    private static final long DROP_TRAIL_MS = 150;
+
+    private List<int[]> lockFlash      = new ArrayList<>();  // 고정 플래시
+    private long        lockFlashTime  = 0;
+    private static final long LOCK_FLASH_MS = 100;
 
     // ── 초기화 ────────────────────────────────────
     public GamePanel() {
@@ -106,10 +122,27 @@ public class GamePanel extends JPanel implements KeyListener {
     private void land() {
         boolean tSpin = isTSpin();
         tSpinMsg = tSpin ? "T-SPIN!" : "";
+
+        // [이펙트] 고정 플래시: 현재 피스 셀 기록
+        lockFlash.clear();
+        for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
+            if (current.getShape()[r][c] == 1 && current.getY()+r >= 0)
+                lockFlash.add(new int[]{current.getY()+r, current.getX()+c});
+        }
+        lockFlashTime = System.currentTimeMillis();
+
         board.placePiece(current);
+
+        // [이펙트] 라인 플래시: 지워질 행 기록 (clearLines 전에)
+        int[] fullRows = board.getFullRowIndices();
+        if (fullRows.length > 0) {
+            clearFlashRows = fullRows;
+            clearFlashTime = System.currentTimeMillis();
+        }
+
         int lines = board.clearLines();
         gm.addScore(lines, tSpin);
-        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+
         Tetromino testNext = Tetromino.create(next.getType());
         if (!board.isValidPosition(testNext)) {
             gm.setGameOver(true);
@@ -187,6 +220,23 @@ public class GamePanel extends JPanel implements KeyListener {
     }
 
     private void hardDrop() {
+        // [이펙트] 잔상: 시작 위치 ~ 최종 위치 사이 셀 기록
+        dropTrail.clear();
+        dropTrailColor = current.getColor();
+        int startY = current.getY();
+        int[][] shape = current.getShape();
+        Tetromino ghost = current.cloneAt(current.getX(), current.getY());
+        while (board.isValidPosition(ghost)) ghost.moveDown();
+        ghost.setY(ghost.getY() - 1);
+        int endY = ghost.getY();
+        for (int dy = startY; dy < endY; dy++) {
+            for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
+                if (shape[r][c] == 1 && dy+r >= 0)
+                    dropTrail.add(new int[]{dy+r, current.getX()+c});
+            }
+        }
+        dropTrailTime = System.currentTimeMillis();
+
         while (board.isValidPosition(current)) current.moveDown();
         current.setY(current.getY() - 1);
         land();
@@ -223,6 +273,7 @@ public class GamePanel extends JPanel implements KeyListener {
             drawGhost(g2);
             drawPiece(g2, current, current.getColor());
         }
+        drawEffects(g2);
         drawSidePanel(g2);
         drawTSpinMsg(g2);
 
@@ -279,13 +330,58 @@ public class GamePanel extends JPanel implements KeyListener {
                 }
     }
 
+    // ── 이펙트 렌더링 ─────────────────────────────
+    private void drawEffects(Graphics2D g) {
+        long now = System.currentTimeMillis();
+
+        // 1. 하드드롭 잔상
+        if (dropTrailColor != null && !dropTrail.isEmpty()) {
+            long elapsed = now - dropTrailTime;
+            if (elapsed < DROP_TRAIL_MS) {
+                float alpha = 0.55f * (1.0f - (float) elapsed / DROP_TRAIL_MS);
+                Color tc = new Color(dropTrailColor.getRed(), dropTrailColor.getGreen(),
+                        dropTrailColor.getBlue(), (int)(alpha * 255));
+                g.setColor(tc);
+                for (int[] cell : dropTrail)
+                    g.fillRect(BX + cell[1]*CELL + 1, BY + cell[0]*CELL + 1, CELL-2, CELL-2);
+            } else { dropTrail.clear(); }
+        }
+
+        // 2. 고정 플래시 (흰색 → 투명)
+        if (!lockFlash.isEmpty()) {
+            long elapsed = now - lockFlashTime;
+            if (elapsed < LOCK_FLASH_MS) {
+                float alpha = 0.70f * (1.0f - (float) elapsed / LOCK_FLASH_MS);
+                g.setColor(new Color(1f, 1f, 1f, alpha));
+                for (int[] cell : lockFlash)
+                    g.fillRect(BX + cell[1]*CELL, BY + cell[0]*CELL, CELL, CELL);
+            } else { lockFlash.clear(); }
+        }
+
+        // 3. 라인 클리어 플래시 (흰색 수평 라인)
+        if (clearFlashRows.length > 0) {
+            long elapsed = now - clearFlashTime;
+            if (elapsed < CLEAR_FLASH_MS) {
+                float alpha = 0.90f * (1.0f - (float) elapsed / CLEAR_FLASH_MS);
+                g.setColor(new Color(1f, 1f, 1f, alpha));
+                for (int row : clearFlashRows)
+                    g.fillRect(BX, BY + row * CELL, Board.COLS * CELL, CELL);
+            } else { clearFlashRows = new int[0]; }
+        }
+    }
+
     private void drawCell(Graphics2D g, int x, int y, Color color) {
         g.setColor(color);
         g.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
+        // 상단 광택 (반투명 흰색)
+        int gH = (CELL - 2) / 2;
+        g.setColor(new Color(255, 255, 255, 55));
+        g.fillRect(x + 2, y + 2, CELL - 4, gH);
+        // 하이라이트
         g.setColor(color.brighter());
         g.drawLine(x + 1,      y + 1,       x + CELL - 2, y + 1);
         g.drawLine(x + 1,      y + 1,       x + 1,        y + CELL - 2);
-        g.setColor(color.darker());
+        g.setColor(color.darker().darker());
         g.drawLine(x + CELL - 2, y + 1,       x + CELL - 2, y + CELL - 2);
         g.drawLine(x + 1,        y + CELL - 2, x + CELL - 2, y + CELL - 2);
     }

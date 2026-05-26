@@ -2,6 +2,8 @@ package TETRIS;
 
 import java.awt.*;
 import java.awt.event.*;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.*;
 
 public class TwoPlayerPanel extends JPanel implements KeyListener {
@@ -31,10 +33,19 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         boolean   canHold = true, lastRot = false, alive = true;
         int       score = 0, level = 1, lines = 0, pending = 0;
         String    tMsg = "";
-        int       delayedGarbage = 0;        // 지연 중인 쓰레기
-        long      garbageTime = 0;           // 쓰레기 받은 시간
-        long      lockStartTime = 0;         // 바닥 닿은 시각 (0=공중)
-        final PieceBag bag = new PieceBag(); // 7-bag (플레이어마다 독립)
+        int       delayedGarbage = 0;
+        long      garbageTime = 0;
+        long      lockStartTime = 0;
+        final PieceBag bag = new PieceBag();
+
+        // ── 이펙트 ──
+        int[]       clearFlashRows = new int[0];
+        long        clearFlashTime = 0;
+        List<int[]> dropTrail      = new ArrayList<>();
+        Color       dropTrailColor = null;
+        long        dropTrailTime  = 0;
+        List<int[]> lockFlash      = new ArrayList<>();
+        long        lockFlashTime  = 0;
 
         void reset() {
             board.clear();
@@ -45,6 +56,9 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             hold = null;
             bag.reset();
             next = bag.nextPiece();
+            clearFlashRows = new int[0]; clearFlashTime = 0;
+            dropTrail.clear(); dropTrailColor = null; dropTrailTime = 0;
+            lockFlash.clear(); lockFlashTime = 0;
         }
 
         /** 쓰레기 적용 후 다음 큐에서 스폰 */
@@ -185,24 +199,30 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     private void land(PlayerState p, PlayerState opp) {
         boolean ts = isTSpin(p);
         p.tMsg = ts ? "T-SPIN!" : "";
+
+        // [이펙트] 고정 플래시
+        p.lockFlash.clear();
+        for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) {
+            if (p.current.getShape()[r][c] == 1 && p.current.getY()+r >= 0)
+                p.lockFlash.add(new int[]{p.current.getY()+r, p.current.getX()+c});
+        }
+        p.lockFlashTime = System.currentTimeMillis();
+
         p.board.placePiece(p.current);
+
+        // [이펙트] 라인 플래시
+        int[] fullRows = p.board.getFullRowIndices();
+        if (fullRows.length > 0) { p.clearFlashRows = fullRows; p.clearFlashTime = System.currentTimeMillis(); }
+
         int cl = p.board.clearLines();
         p.addScore(cl, ts);
         int gb = p.calcGarbage(cl, ts);
-        if (gb > 0) {
-            opp.delayedGarbage = gb;
-            opp.garbageTime = System.currentTimeMillis();
-        }
-        // 라인 제거 후 다음 피스가 스폰 가능한지 체크 (top-out 판정)
+        if (gb > 0) { opp.delayedGarbage = gb; opp.garbageTime = System.currentTimeMillis(); }
+
         Tetromino testNext = Tetromino.create(p.next.getType());
         if (!p.board.isValidPosition(testNext)) {
-            p.alive = false;
-            gameOver = true;
-            winner = (p == p1) ? 2 : 1;
-            timer.stop();
-        } else {
-            p.spawn();
-        }
+            p.alive = false; gameOver = true; winner = (p == p1) ? 2 : 1; timer.stop();
+        } else { p.spawn(); }
     }
 
     // ── T-스핀 ────────────────────────────────────
@@ -232,7 +252,24 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             if (p == p1) t1 = System.currentTimeMillis(); else t2 = System.currentTimeMillis();
         }
     }
-    private void hd(PlayerState p, PlayerState o) { while (p.board.isValidPosition(p.current)) p.current.moveDown(); p.current.setY(p.current.getY()-1); land(p,o); p.lockStartTime = 0; }
+    private void hd(PlayerState p, PlayerState o) {
+        // [이펙트] 잔상
+        p.dropTrail.clear();
+        p.dropTrailColor = p.current.getColor();
+        int startY = p.current.getY();
+        int[][] shape = p.current.getShape();
+        Tetromino ghost = p.current.cloneAt(p.current.getX(), p.current.getY());
+        while (p.board.isValidPosition(ghost)) ghost.moveDown();
+        ghost.setY(ghost.getY() - 1);
+        int endY = ghost.getY();
+        for (int dy = startY; dy < endY; dy++)
+            for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++)
+                if (shape[r][c] == 1 && dy+r >= 0)
+                    p.dropTrail.add(new int[]{dy+r, p.current.getX()+c});
+        p.dropTrailTime = System.currentTimeMillis();
+        while (p.board.isValidPosition(p.current)) p.current.moveDown();
+        p.current.setY(p.current.getY()-1); land(p,o); p.lockStartTime = 0;
+    }
     private void hold(PlayerState p) {
         p.swapHold();
         // alive 체크는 land()에서 top-out 판정 시 수행
@@ -346,6 +383,41 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             g.setColor(new Color(255,220,50));
             FontMetrics fm = g.getFontMetrics();
             g.drawString(p.tMsg, bx+(BOARD_W-fm.stringWidth(p.tMsg))/2, BY+BOARD_H/2-10);
+        }
+
+        // ── 이펙트 오버레이 ──
+        long now = System.currentTimeMillis();
+        // 잔상
+        if (p.dropTrailColor != null && !p.dropTrail.isEmpty()) {
+            long el = now - p.dropTrailTime;
+            if (el < 150) {
+                float alpha = 0.5f * (1f - (float)el/150);
+                Color tc = new Color(p.dropTrailColor.getRed(), p.dropTrailColor.getGreen(),
+                        p.dropTrailColor.getBlue(), (int)(alpha*255));
+                g.setColor(tc);
+                for (int[] cell : p.dropTrail)
+                    g.fillRect(bx+cell[1]*CELL+1, BY+cell[0]*CELL+1, CELL-2, CELL-2);
+            } else { p.dropTrail.clear(); }
+        }
+        // 고정 플래시
+        if (!p.lockFlash.isEmpty()) {
+            long el = now - p.lockFlashTime;
+            if (el < 100) {
+                float alpha = 0.65f * (1f - (float)el/100);
+                g.setColor(new Color(1f,1f,1f,alpha));
+                for (int[] cell : p.lockFlash)
+                    g.fillRect(bx+cell[1]*CELL, BY+cell[0]*CELL, CELL, CELL);
+            } else { p.lockFlash.clear(); }
+        }
+        // 라인 클리어 플래시
+        if (p.clearFlashRows.length > 0) {
+            long el = now - p.clearFlashTime;
+            if (el < 140) {
+                float alpha = 0.88f * (1f - (float)el/140);
+                g.setColor(new Color(1f,1f,1f,alpha));
+                for (int row : p.clearFlashRows)
+                    g.fillRect(bx, BY+row*CELL, BOARD_W, CELL);
+            } else { p.clearFlashRows = new int[0]; }
         }
     }
 
@@ -544,12 +616,17 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
 
     private void drawCell(Graphics2D g, int x, int y, Color color, int size) {
         g.setColor(color);
-        g.fillRect(x+1,y+1,size-2,size-2);
+        g.fillRect(x+1, y+1, size-2, size-2);
+        if (size >= 16) {
+            int gH = (size-2)/2;
+            g.setColor(new Color(255, 255, 255, 50));
+            g.fillRect(x+2, y+2, size-4, gH);
+        }
         g.setColor(color.brighter());
-        g.drawLine(x+1,y+1,x+size-2,y+1);
-        g.drawLine(x+1,y+1,x+1,y+size-2);
-        g.setColor(color.darker());
-        g.drawLine(x+size-2,y+1,x+size-2,y+size-2);
-        g.drawLine(x+1,y+size-2,x+size-2,y+size-2);
+        g.drawLine(x+1, y+1, x+size-2, y+1);
+        g.drawLine(x+1, y+1, x+1, y+size-2);
+        g.setColor(color.darker().darker());
+        g.drawLine(x+size-2, y+1, x+size-2, y+size-2);
+        g.drawLine(x+1, y+size-2, x+size-2, y+size-2);
     }
 }

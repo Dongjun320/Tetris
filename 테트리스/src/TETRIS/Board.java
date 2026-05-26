@@ -131,4 +131,13 @@ public class Board {
 
     public Color getCell(int row, int col) { return grid[row][col]; }
     public void  clear()                   { grid = new Color[ROWS][COLS]; }
+
+    /** 완성된(꽉 찬) 행 인덱스 목록 반환. clearLines() 호출 전에 사용하면 이펙트에 활용 가능. */
+    public int[] getFullRowIndices() {
+        java.util.List<Integer> rows = new java.util.ArrayList<>();
+        for (int r = 0; r < ROWS; r++) {
+            if (isLineFull(r)) rows.add(r);
+        }
+        return rows.stream().mapToInt(Integer::intValue).toArray();
+    }
 }
