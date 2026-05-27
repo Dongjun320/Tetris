@@ -284,23 +284,23 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             if (k == KeyEvent.VK_ESCAPE && backCallback != null) { timer.stop(); SwingUtilities.invokeLater(backCallback); }
             return;
         }
-        // P1: WASD + Space(하드드롭) + Q(홀드)
-        if (p1.alive) switch (k) {
-            case KeyEvent.VK_A:     ml(p1);      repaint(); break;
-            case KeyEvent.VK_D:     mr(p1);      repaint(); break;
-            case KeyEvent.VK_W:     rot(p1);     repaint(); break;
-            case KeyEvent.VK_S:     sd(p1,p2);   repaint(); break;
-            case KeyEvent.VK_SPACE: hd(p1,p2);   repaint(); break;
-            case KeyEvent.VK_Q:     hold(p1);    repaint(); break;
+        KeyBinding kb1 = KeyBinding.getP1();
+        KeyBinding kb2 = KeyBinding.getP2();
+        if (p1.alive) {
+            if (k == kb1.left)     { ml(p1);    repaint(); }
+            if (k == kb1.right)    { mr(p1);    repaint(); }
+            if (k == kb1.rotate)   { rot(p1);   repaint(); }
+            if (k == kb1.softDrop) { sd(p1,p2); repaint(); }
+            if (k == kb1.hardDrop) { hd(p1,p2); repaint(); }
+            if (k == kb1.hold)     { hold(p1);  repaint(); }
         }
-        // P2: 넘패드 4·6·8·2·0·7
-        if (p2.alive) switch (k) {
-            case KeyEvent.VK_NUMPAD4: ml(p2);    repaint(); break;
-            case KeyEvent.VK_NUMPAD6: mr(p2);    repaint(); break;
-            case KeyEvent.VK_NUMPAD8: rot(p2);   repaint(); break;
-            case KeyEvent.VK_NUMPAD2: sd(p2,p1); repaint(); break;
-            case KeyEvent.VK_NUMPAD0: hd(p2,p1); repaint(); break;
-            case KeyEvent.VK_NUMPAD7: hold(p2);  repaint(); break;
+        if (p2.alive) {
+            if (k == kb2.left)     { ml(p2);    repaint(); }
+            if (k == kb2.right)    { mr(p2);    repaint(); }
+            if (k == kb2.rotate)   { rot(p2);   repaint(); }
+            if (k == kb2.softDrop) { sd(p2,p1); repaint(); }
+            if (k == kb2.hardDrop) { hd(p2,p1); repaint(); }
+            if (k == kb2.hold)     { hold(p2);  repaint(); }
         }
         if (k == KeyEvent.VK_ESCAPE && backCallback != null) { timer.stop(); SwingUtilities.invokeLater(backCallback); }
     }
@@ -519,12 +519,13 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         g.setColor(new Color(100, 165, 255));
         g.drawString("PLAYER 1", cx - fm.stringWidth("PLAYER 1") / 2, y);
 
+        KeyBinding kb1 = KeyBinding.getP1();
         y += 14;
-        drawKeyRow(g, CTR_X + 10, y, "A / D",  "이동",        kf, df, new Color(160, 200, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "W",      "회전",        kf, df, new Color(160, 200, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "S",      "소프트 드롭", kf, df, new Color(160, 200, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "Space",  "하드 드롭",   kf, df, new Color(160, 200, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "Q",      "홀드",        kf, df, new Color(160, 200, 255));
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.left)+"/"+KeyBinding.keyName(kb1.right), "이동",        kf, df, new Color(160, 200, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.rotate),   "회전",        kf, df, new Color(160, 200, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.softDrop), "소프트 드롭", kf, df, new Color(160, 200, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hardDrop), "하드 드롭",   kf, df, new Color(160, 200, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hold),     "홀드",        kf, df, new Color(160, 200, 255));
 
         // 구분선
         y += 12;
@@ -537,12 +538,13 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         g.setColor(new Color(200, 100, 255));
         g.drawString("PLAYER 2", cx - fm.stringWidth("PLAYER 2") / 2, y);
 
+        KeyBinding kb2 = KeyBinding.getP2();
         y += 14;
-        drawKeyRow(g, CTR_X + 10, y, "4 / 6", "이동",        kf, df, new Color(220, 160, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "8",     "회전",        kf, df, new Color(220, 160, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "2",     "소프트 드롭", kf, df, new Color(220, 160, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "0",     "하드 드롭",   kf, df, new Color(220, 160, 255)); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "7",     "홀드",        kf, df, new Color(220, 160, 255));
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.left)+"/"+KeyBinding.keyName(kb2.right), "이동",        kf, df, new Color(220, 160, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.rotate),   "회전",        kf, df, new Color(220, 160, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.softDrop), "소프트 드롭", kf, df, new Color(220, 160, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hardDrop), "하드 드롭",   kf, df, new Color(220, 160, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hold),     "홀드",        kf, df, new Color(220, 160, 255));
 
         // 구분선
         y += 12;

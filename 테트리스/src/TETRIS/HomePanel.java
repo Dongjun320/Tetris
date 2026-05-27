@@ -5,6 +5,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.awt.Window;
 
 public class HomePanel extends JPanel {
 
@@ -45,7 +46,7 @@ public class HomePanel extends JPanel {
     private Timer animTimer;
 
     // ── 버튼 hover 상태 (애니메이션용) ──────────────────────
-    private float[] btnHover = new float[3];   // 0.0 ~ 1.0
+    private float[] btnHover = new float[4];   // 0.0 ~ 1.0  (인덱스 3 = 키 설정 버튼)
     private Timer   hoverTimer;
 
     public HomePanel(Runnable on1P, Runnable on2P, Runnable onOnline) {
@@ -76,18 +77,26 @@ public class HomePanel extends JPanel {
         JButton btn1P     = makeButton("1 PLAYER",     0, new Color(40, 100, 200), new Color(70, 140, 255));
         JButton btn2P     = makeButton("2 PLAYER",     1, new Color(120, 35, 160), new Color(165, 65, 215));
         JButton btnOnline = makeButton("ONLINE MULTI", 2, new Color(30, 140, 100), new Color(50, 190, 135));
+        JButton btnKey    = makeSmallButton("⚙  키 설정", 3, new Color(55, 62, 95), new Color(80, 90, 140));
 
         btn1P.setBounds(135, 268, 250, 54);
         btn2P.setBounds(135, 338, 250, 54);
         btnOnline.setBounds(135, 408, 250, 54);
+        btnKey.setBounds(195, 470, 130, 30);
 
         btn1P.addActionListener(e -> on1P.run());
         btn2P.addActionListener(e -> on2P.run());
         btnOnline.addActionListener(e -> { if (onOnline != null) onOnline.run(); });
+        btnKey.addActionListener(e -> {
+            Window w = SwingUtilities.getWindowAncestor(HomePanel.this);
+            Frame frame = (w instanceof Frame) ? (Frame) w : null;
+            new KeyConfigDialog(frame).setVisible(true);
+        });
 
         add(btn1P);
         add(btn2P);
         add(btnOnline);
+        add(btnKey);
     }
 
     private void initFallingBlocks() {
@@ -145,6 +154,49 @@ public class HomePanel extends JPanel {
                 int tx2 = 32 + (getWidth()-32 - fm.stringWidth(getText())) / 2;
                 int ty3 = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
                 g2.drawString(getText(), tx2, ty3);
+            }
+        };
+        btn.setFocusPainted(false);
+        btn.setOpaque(false);
+        btn.setContentAreaFilled(false);
+        btn.setBorderPainted(false);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
+    /** 작은 보조 버튼 (키 설정 등) */
+    private JButton makeSmallButton(String text, int index, Color base, Color hover) {
+        JButton btn = new JButton(text) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                Graphics2D g2 = (Graphics2D) g;
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                boolean ro = getModel().isRollover();
+                if (ro) btnHover[index] = Math.min(1f, btnHover[index] + 0.10f);
+                else    btnHover[index] = Math.max(0f, btnHover[index] - 0.07f);
+                float h = btnHover[index];
+
+                Color c1 = interpolate(base, hover, h);
+                GradientPaint gp = new GradientPaint(0, 0, c1.brighter(), 0, getHeight(), c1);
+                g2.setPaint(gp);
+                g2.fillRoundRect(0, 0, getWidth()-1, getHeight()-1, 10, 10);
+
+                // 상단 광택
+                g2.setColor(new Color(255, 255, 255, (int)(25 + h * 25)));
+                g2.fillRoundRect(2, 2, getWidth()-4, getHeight()/2 - 2, 8, 8);
+
+                // 테두리
+                g2.setColor(new Color(255, 255, 255, (int)(40 + h * 60)));
+                g2.setStroke(new BasicStroke(1.0f));
+                g2.drawRoundRect(0, 0, getWidth()-1, getHeight()-1, 10, 10);
+
+                // 텍스트
+                g2.setFont(new Font("맑은 고딕", Font.BOLD, 12));
+                FontMetrics fm = g2.getFontMetrics();
+                g2.setColor(new Color(200, 215, 255));
+                int tx = (getWidth() - fm.stringWidth(getText())) / 2;
+                int ty = (getHeight() + fm.getAscent() - fm.getDescent()) / 2;
+                g2.drawString(getText(), tx, ty);
             }
         };
         btn.setFocusPainted(false);
@@ -260,10 +312,10 @@ public class HomePanel extends JPanel {
     private void drawHint(Graphics2D g) {
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 11));
         g.setColor(new Color(70, 82, 130));
-        String s1 = "게임 중 ESC → 홈으로";
-        String s2 = "2P: WASD(P1)  넘패드(P2)   ONLINE: 같은 와이파이의 두 PC";
+        String s1 = "게임 중 ESC → 홈으로   |   ⚙ 키 설정으로 키 변경 가능";
+        String s2 = "ONLINE: 같은 와이파이의 두 PC에서 접속";
         FontMetrics fm = g.getFontMetrics();
-        g.drawString(s1, (520 - fm.stringWidth(s1)) / 2, 476);
-        g.drawString(s2, (520 - fm.stringWidth(s2)) / 2, 492);
+        g.drawString(s1, (520 - fm.stringWidth(s1)) / 2, 508);
+        g.drawString(s2, (520 - fm.stringWidth(s2)) / 2, 522);
     }
 }

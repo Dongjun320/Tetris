@@ -412,8 +412,16 @@ public class GamePanel extends JPanel implements KeyListener {
         g.drawString("CONTROLS", SX + 35, cy + 17);
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 11));
         g.setColor(new Color(210, 215, 235));
-        String[] keys = { "← → : 이동", "↑    : 회전", "↓    : 천천히",
-                           "SPACE: 즉시낙하", "H    : 홀드", "P    : 일시정지", "R    : 재시작" };
+        KeyBinding kb = KeyBinding.getSingle();
+        String[] keys = {
+            KeyBinding.keyName(kb.left) + "/" + KeyBinding.keyName(kb.right) + " : 이동",
+            KeyBinding.keyName(kb.rotate)   + " : 회전",
+            KeyBinding.keyName(kb.softDrop) + " : 천천히",
+            KeyBinding.keyName(kb.hardDrop) + " : 즉시낙하",
+            KeyBinding.keyName(kb.hold)     + " : 홀드",
+            "P : 일시정지",
+            "R : 재시작"
+        };
         for (int i = 0; i < keys.length; i++)
             g.drawString(keys[i], SX + 12, cy + 34 + i * 18);
     }
@@ -492,19 +500,21 @@ public class GamePanel extends JPanel implements KeyListener {
             return;
         }
         boolean playing = !gm.isPaused();
-        switch (e.getKeyCode()) {
-            case KeyEvent.VK_LEFT:  if (playing) moveLeft();   break;
-            case KeyEvent.VK_RIGHT: if (playing) moveRight();  break;
-            case KeyEvent.VK_UP:    if (playing) rotate();     break;
-            case KeyEvent.VK_DOWN:  if (playing) softDrop();   break;
-            case KeyEvent.VK_SPACE: if (playing) hardDrop();   break;
-            case KeyEvent.VK_H:     if (playing) hold();       break;
-            case KeyEvent.VK_P:      gm.togglePause(); repaint(); break;
-            case KeyEvent.VK_R:      startGame(); break;
-            case KeyEvent.VK_ESCAPE:
-                timer.stop();
-                if (backCallback != null) SwingUtilities.invokeLater(backCallback);
-                break;
+        int k = e.getKeyCode();
+        KeyBinding kb = KeyBinding.getSingle();
+        if (playing) {
+            if (k == kb.left)     { moveLeft();  return; }
+            if (k == kb.right)    { moveRight(); return; }
+            if (k == kb.rotate)   { rotate();    return; }
+            if (k == kb.softDrop) { softDrop();  return; }
+            if (k == kb.hardDrop) { hardDrop();  return; }
+            if (k == kb.hold)     { hold();      return; }
+        }
+        if (k == KeyEvent.VK_P) { gm.togglePause(); repaint(); }
+        if (k == KeyEvent.VK_R) { startGame(); }
+        if (k == KeyEvent.VK_ESCAPE) {
+            timer.stop();
+            if (backCallback != null) SwingUtilities.invokeLater(backCallback);
         }
     }
 

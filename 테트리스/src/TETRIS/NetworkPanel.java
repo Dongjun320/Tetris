@@ -405,14 +405,13 @@ public class NetworkPanel extends JPanel implements KeyListener {
         }
         if (inCountdown) return;
         if (!alive)      return;
-        switch (k) {
-            case KeyEvent.VK_A:     ml();    repaint(); break;
-            case KeyEvent.VK_D:     mr();    repaint(); break;
-            case KeyEvent.VK_W:     rot();   repaint(); break;
-            case KeyEvent.VK_S:     sd();    repaint(); break;
-            case KeyEvent.VK_SPACE: hd();    repaint(); break;
-            case KeyEvent.VK_Q:     doHold();repaint(); break;
-        }
+        KeyBinding kb = KeyBinding.getOnline();
+        if (k == kb.left)     { ml();     repaint(); }
+        if (k == kb.right)    { mr();     repaint(); }
+        if (k == kb.rotate)   { rot();    repaint(); }
+        if (k == kb.softDrop) { sd();     repaint(); }
+        if (k == kb.hardDrop) { hd();     repaint(); }
+        if (k == kb.hold)     { doHold(); repaint(); }
     }
     @Override public void keyReleased(KeyEvent e) {}
     @Override public void keyTyped(KeyEvent e) {}
@@ -958,12 +957,13 @@ public class NetworkPanel extends JPanel implements KeyListener {
         String yc = "YOUR CONTROLS";
         g.drawString(yc, cx - fm.stringWidth(yc)/2, y);
 
+        KeyBinding kb = KeyBinding.getOnline();
         y += 14;
-        drawKeyRow(g, CTR_X + 10, y, "A / D",  "이동",        kf, df); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "W",      "회전",        kf, df); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "S",      "소프트 드롭", kf, df); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "Space",  "하드 드롭",   kf, df); y += 15;
-        drawKeyRow(g, CTR_X + 10, y, "Q",      "홀드",        kf, df);
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb.left)+"/"+KeyBinding.keyName(kb.right), "이동",        kf, df); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb.rotate),   "회전",        kf, df); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb.softDrop), "소프트 드롭", kf, df); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb.hardDrop), "하드 드롭",   kf, df); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb.hold),     "홀드",        kf, df);
 
         y += 14;
         drawDivider(g, y);
