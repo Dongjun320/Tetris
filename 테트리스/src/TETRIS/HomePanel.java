@@ -33,13 +33,13 @@ public class HomePanel extends JPanel {
         {{0,2},{1,0},{1,1},{1,2}},          // L
     };
     private static final Color[] BLOCK_COLORS = {
-        new Color(0,   210, 230, 70),
-        new Color(230, 230,  0,  65),
-        new Color(160,  0, 230, 70),
-        new Color( 0,  210,  0,  65),
-        new Color(230,  0,   0,  70),
-        new Color(  0,  0, 220, 70),
-        new Color(230, 150,  0,  70),
+        new Color(0,   210, 235, 90),
+        new Color(235, 230,  0,  85),
+        new Color(170,  0, 235, 90),
+        new Color( 0,  215,  0,  85),
+        new Color(235,  0,   0,  90),
+        new Color( 40, 40, 235, 90),
+        new Color(235, 155,  0,  90),
     };
 
     private final List<FallingBlock> fallingBlocks = new ArrayList<>();
@@ -230,24 +230,31 @@ public class HomePanel extends JPanel {
 
     // ── 배경 그라데이션 ───────────────────────────────────
     private void drawBackground(Graphics2D g) {
-        // 상단 짙은 네이비 → 하단 약간 밝은 남색
-        GradientPaint gp = new GradientPaint(0, 0, new Color(10, 12, 26),
-                                              0, 510, new Color(18, 22, 46));
+        // 살짝 밝아진 미드나잇 블루 그라데이션
+        GradientPaint gp = new GradientPaint(0, 0, new Color(24, 28, 58),
+                                              0, 510, new Color(38, 46, 84));
         g.setPaint(gp);
         g.fillRect(0, 0, 520, 510);
 
-        // 오른쪽 위 은은한 보라 빛
-        RadialGradientPaint rg = new RadialGradientPaint(420, 80, 200,
+        // 오른쪽 위 보라 빛 (더 선명하게)
+        RadialGradientPaint rg = new RadialGradientPaint(430, 75, 230,
                 new float[]{0f, 1f},
-                new Color[]{new Color(100, 40, 180, 45), new Color(0,0,0,0)});
+                new Color[]{new Color(120, 55, 215, 72), new Color(0, 0, 0, 0)});
         g.setPaint(rg);
         g.fillRect(0, 0, 520, 510);
 
-        // 왼쪽 아래 청록빛
-        RadialGradientPaint rg2 = new RadialGradientPaint(60, 430, 160,
+        // 왼쪽 아래 청록빛 (더 선명하게)
+        RadialGradientPaint rg2 = new RadialGradientPaint(55, 435, 185,
                 new float[]{0f, 1f},
-                new Color[]{new Color(0, 150, 200, 35), new Color(0,0,0,0)});
+                new Color[]{new Color(15, 170, 220, 60), new Color(0, 0, 0, 0)});
         g.setPaint(rg2);
+        g.fillRect(0, 0, 520, 510);
+
+        // 중앙 하단 핑크 포인트
+        RadialGradientPaint rg3 = new RadialGradientPaint(260, 420, 150,
+                new float[]{0f, 1f},
+                new Color[]{new Color(210, 55, 175, 30), new Color(0, 0, 0, 0)});
+        g.setPaint(rg3);
         g.fillRect(0, 0, 520, 510);
     }
 
@@ -273,10 +280,10 @@ public class HomePanel extends JPanel {
         int tx = (520 - fm.stringWidth("TETRIS")) / 2;
         int ty = 178;
 
-        // 글로우 레이어 (여러 겹 흐리게)
+        // 글로우 레이어 (여러 겹 흐리게, 좀 더 선명)
         for (int i = 8; i >= 1; i--) {
-            int alpha = (int)(10 + (8 - i) * 4);
-            g.setColor(new Color(80, 200, 255, alpha));
+            int alpha = (int)(14 + (8 - i) * 5);
+            g.setColor(new Color(100, 218, 255, alpha));
             g.drawString("TETRIS", tx - i, ty - i);
             g.drawString("TETRIS", tx + i, ty + i);
         }
@@ -286,8 +293,8 @@ public class HomePanel extends JPanel {
         g.drawString("TETRIS", tx + 4, ty + 5);
 
         // 메인 그라데이션 텍스트
-        GradientPaint gp = new GradientPaint(tx, ty - 80, new Color(60, 230, 255),
-                                              tx + 400, ty, new Color(180, 60, 255));
+        GradientPaint gp = new GradientPaint(tx, ty - 80, new Color(85, 242, 255),
+                                              tx + 400, ty, new Color(205, 75, 255));
         g.setPaint(gp);
         g.drawString("TETRIS", tx, ty);
         g.setPaint(null);
@@ -302,7 +309,7 @@ public class HomePanel extends JPanel {
     // ── 서브타이틀 ────────────────────────────────────────
     private void drawSubtitle(Graphics2D g) {
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 14));
-        g.setColor(new Color(140, 160, 215));
+        g.setColor(new Color(165, 188, 235));
         String s = "모드를 선택하세요";
         FontMetrics fm = g.getFontMetrics();
         g.drawString(s, (520 - fm.stringWidth(s)) / 2, 226);
@@ -311,7 +318,7 @@ public class HomePanel extends JPanel {
     // ── 하단 힌트 ─────────────────────────────────────────
     private void drawHint(Graphics2D g) {
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 11));
-        g.setColor(new Color(70, 82, 130));
+        g.setColor(new Color(95, 112, 165));
         String s1 = "게임 중 ESC → 홈으로   |   ⚙ 키 설정으로 키 변경 가능";
         String s2 = "ONLINE: 같은 와이파이의 두 PC에서 접속";
         FontMetrics fm = g.getFontMetrics();

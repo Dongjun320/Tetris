@@ -44,10 +44,25 @@ public class GamePanel extends JPanel implements KeyListener {
     private long        lockFlashTime  = 0;
     private static final long LOCK_FLASH_MS = 100;
 
+    // ── 귀여운 UI 팔레트 (중간 밝기) ─────────────
+    private static final Color BG_TOP   = new Color(198, 194, 236);
+    private static final Color BG_BOT   = new Color(180, 200, 234);
+    private static final Color BOARD_BG = new Color(224, 226, 242);
+    private static final Color BOARD_BD = new Color(128, 118, 185);
+    private static final Color GRID_C   = new Color(190, 200, 228);
+    private static final Color BOX_BG1  = new Color(208, 218, 248);
+    private static final Color BOX_BG2  = new Color(194, 208, 238);
+    private static final Color BOX_BD   = new Color(136, 152, 208);
+    private static final Color LBL_C    = new Color(85, 102, 170);
+    private static final Color VAL_C    = new Color(38, 52, 158);
+    private static final Color CTL_C    = new Color(72, 88, 158);
+    private static final int   CELL_ARC = 8;
+    private static final int   BOX_ARC  = 12;
+
     // ── 초기화 ────────────────────────────────────
     public GamePanel() {
         setPreferredSize(new Dimension(SX + 160, BY * 2 + Board.ROWS * CELL));
-        setBackground(new Color(28, 32, 48));
+        setBackground(new Color(194, 190, 230));
         setFocusable(true);
         addKeyListener(this);
 
@@ -268,6 +283,7 @@ public class GamePanel extends JPanel implements KeyListener {
         Graphics2D g2 = (Graphics2D) g;
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        drawBg(g2);
         drawBoard(g2);
         if (current != null) {
             drawGhost(g2);
@@ -277,23 +293,34 @@ public class GamePanel extends JPanel implements KeyListener {
         drawSidePanel(g2);
         drawTSpinMsg(g2);
 
-        if (gm.isGameOver()) drawOverlay(g2, "GAME OVER", new Color(255, 70, 70), "R 키를 눌러 재시작");
-        if (gm.isPaused())   drawOverlay(g2, "PAUSED",    Color.YELLOW,           "P 키를 눌러 계속");
+        if (gm.isGameOver()) drawOverlay(g2, "GAME OVER", new Color(215, 45, 75),  "R 키를 눌러 재시작");
+        if (gm.isPaused())   drawOverlay(g2, "PAUSED",    new Color(50, 95, 215),  "P 키를 눌러 계속");
+    }
+
+    private void drawBg(Graphics2D g) {
+        GradientPaint gp = new GradientPaint(0, 0, BG_TOP, 0, getHeight(), BG_BOT);
+        g.setPaint(gp);
+        g.fillRect(0, 0, getWidth(), getHeight());
+        g.setPaint(null);
     }
 
     private void drawBoard(Graphics2D g) {
+        int bw = Board.COLS * CELL, bh = Board.ROWS * CELL;
+        // 그림자
+        g.setColor(new Color(0, 0, 0, 22));
+        g.fillRoundRect(BX + 4, BY + 4, bw + 4, bh + 4, BOX_ARC, BOX_ARC);
         // 테두리
-        g.setColor(new Color(85, 90, 120));
-        g.fillRect(BX - 2, BY - 2, Board.COLS * CELL + 4, Board.ROWS * CELL + 4);
-        // 배경
-        g.setColor(new Color(18, 22, 38));
-        g.fillRect(BX, BY, Board.COLS * CELL, Board.ROWS * CELL);
-        // 격자선 (약간 밝게)
-        g.setColor(new Color(40, 45, 65));
+        g.setColor(BOARD_BD);
+        g.fillRoundRect(BX - 2, BY - 2, bw + 4, bh + 4, BOX_ARC, BOX_ARC);
+        // 배경 (밝은 흰색 계열)
+        g.setColor(BOARD_BG);
+        g.fillRect(BX, BY, bw, bh);
+        // 격자선 (연한 파스텔)
+        g.setColor(GRID_C);
         for (int r = 0; r <= Board.ROWS; r++)
-            g.drawLine(BX, BY + r * CELL, BX + Board.COLS * CELL, BY + r * CELL);
+            g.drawLine(BX, BY + r * CELL, BX + bw, BY + r * CELL);
         for (int c = 0; c <= Board.COLS; c++)
-            g.drawLine(BX + c * CELL, BY, BX + c * CELL, BY + Board.ROWS * CELL);
+            g.drawLine(BX + c * CELL, BY, BX + c * CELL, BY + bh);
         // 고정된 블록
         for (int r = 0; r < Board.ROWS; r++)
             for (int c = 0; c < Board.COLS; c++) {
@@ -317,16 +344,20 @@ public class GamePanel extends JPanel implements KeyListener {
         if (ghost.getY() == current.getY()) return;
 
         Color base   = current.getColor();
-        Color fill   = new Color(base.getRed(), base.getGreen(), base.getBlue(), 55);
-        Color border = new Color(base.getRed(), base.getGreen(), base.getBlue(), 140);
+        Color fill   = new Color(base.getRed(), base.getGreen(), base.getBlue(), 28);
+        Color border = new Color(base.getRed(), base.getGreen(), base.getBlue(), 178);
         int[][] shape = ghost.getShape();
         for (int r = 0; r < 4; r++)
             for (int c = 0; c < 4; c++)
                 if (shape[r][c] == 1 && ghost.getY() + r >= 0) {
                     int px = BX + (ghost.getX() + c) * CELL;
                     int py = BY + (ghost.getY() + r) * CELL;
-                    g.setColor(fill);   g.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
-                    g.setColor(border); g.drawRect(px + 1, py + 1, CELL - 3, CELL - 3);
+                    g.setColor(fill);
+                    g.fillRoundRect(px + 1, py + 1, CELL - 2, CELL - 2, CELL_ARC, CELL_ARC);
+                    g.setColor(border);
+                    g.setStroke(new BasicStroke(1.8f));
+                    g.drawRoundRect(px + 1, py + 1, CELL - 2, CELL - 2, CELL_ARC, CELL_ARC);
+                    g.setStroke(new BasicStroke(1.0f));
                 }
     }
 
@@ -343,27 +374,27 @@ public class GamePanel extends JPanel implements KeyListener {
                         dropTrailColor.getBlue(), (int)(alpha * 255));
                 g.setColor(tc);
                 for (int[] cell : dropTrail)
-                    g.fillRect(BX + cell[1]*CELL + 1, BY + cell[0]*CELL + 1, CELL-2, CELL-2);
+                    g.fillRoundRect(BX + cell[1]*CELL + 1, BY + cell[0]*CELL + 1, CELL-2, CELL-2, CELL_ARC, CELL_ARC);
             } else { dropTrail.clear(); }
         }
 
-        // 2. 고정 플래시 (흰색 → 투명)
+        // 2. 고정 플래시 (밝은 파란빛)
         if (!lockFlash.isEmpty()) {
             long elapsed = now - lockFlashTime;
             if (elapsed < LOCK_FLASH_MS) {
-                float alpha = 0.70f * (1.0f - (float) elapsed / LOCK_FLASH_MS);
-                g.setColor(new Color(1f, 1f, 1f, alpha));
+                float alpha = 0.62f * (1.0f - (float) elapsed / LOCK_FLASH_MS);
+                g.setColor(new Color(155, 195, 255, (int)(alpha * 255)));
                 for (int[] cell : lockFlash)
-                    g.fillRect(BX + cell[1]*CELL, BY + cell[0]*CELL, CELL, CELL);
+                    g.fillRoundRect(BX + cell[1]*CELL, BY + cell[0]*CELL, CELL, CELL, CELL_ARC, CELL_ARC);
             } else { lockFlash.clear(); }
         }
 
-        // 3. 라인 클리어 플래시 (흰색 수평 라인)
+        // 3. 라인 클리어 플래시 (황금빛)
         if (clearFlashRows.length > 0) {
             long elapsed = now - clearFlashTime;
             if (elapsed < CLEAR_FLASH_MS) {
-                float alpha = 0.90f * (1.0f - (float) elapsed / CLEAR_FLASH_MS);
-                g.setColor(new Color(1f, 1f, 1f, alpha));
+                float alpha = 0.88f * (1.0f - (float) elapsed / CLEAR_FLASH_MS);
+                g.setColor(new Color(255, 210, 50, (int)(alpha * 255)));
                 for (int row : clearFlashRows)
                     g.fillRect(BX, BY + row * CELL, Board.COLS * CELL, CELL);
             } else { clearFlashRows = new int[0]; }
@@ -371,19 +402,27 @@ public class GamePanel extends JPanel implements KeyListener {
     }
 
     private void drawCell(Graphics2D g, int x, int y, Color color) {
-        g.setColor(color);
-        g.fillRect(x + 1, y + 1, CELL - 2, CELL - 2);
-        // 상단 광택 (반투명 흰색)
-        int gH = (CELL - 2) / 2;
-        g.setColor(new Color(255, 255, 255, 55));
-        g.fillRect(x + 2, y + 2, CELL - 4, gH);
-        // 하이라이트
-        g.setColor(color.brighter());
-        g.drawLine(x + 1,      y + 1,       x + CELL - 2, y + 1);
-        g.drawLine(x + 1,      y + 1,       x + 1,        y + CELL - 2);
-        g.setColor(color.darker().darker());
-        g.drawLine(x + CELL - 2, y + 1,       x + CELL - 2, y + CELL - 2);
-        g.drawLine(x + 1,        y + CELL - 2, x + CELL - 2, y + CELL - 2);
+        // 그라데이션: 위쪽 밝게, 아래쪽 원색
+        GradientPaint gp = new GradientPaint(x, y + 1, lighter(color, 0.35f), x, y + CELL - 1, color);
+        g.setPaint(gp);
+        g.fillRoundRect(x + 1, y + 1, CELL - 2, CELL - 2, CELL_ARC, CELL_ARC);
+        // 상단 광택 스트라이프
+        g.setColor(new Color(255, 255, 255, 108));
+        g.fillRoundRect(x + 2, y + 2, CELL - 4, (CELL - 2) / 3, CELL_ARC, CELL_ARC);
+        // 미세 아웃라인
+        g.setPaint(null);
+        g.setColor(new Color(0, 0, 0, 28));
+        g.setStroke(new BasicStroke(1.0f));
+        g.drawRoundRect(x + 1, y + 1, CELL - 2, CELL - 2, CELL_ARC, CELL_ARC);
+    }
+
+    /** 색을 흰색 방향으로 t 비율만큼 밝힘 */
+    private Color lighter(Color c, float t) {
+        return new Color(
+            Math.min(255, (int)(c.getRed()   + (255 - c.getRed())   * t)),
+            Math.min(255, (int)(c.getGreen() + (255 - c.getGreen()) * t)),
+            Math.min(255, (int)(c.getBlue()  + (255 - c.getBlue())  * t))
+        );
     }
 
     // ── 사이드 패널 ───────────────────────────────
@@ -405,13 +444,20 @@ public class GamePanel extends JPanel implements KeyListener {
 
         // 조작법
         int cy = iy + 212;
-        g.setColor(new Color(60, 66, 95));
-        g.fillRoundRect(SX, cy, 150, 155, 10, 10);
-        g.setColor(new Color(185, 195, 225));
+        g.setColor(new Color(0, 0, 0, 18));
+        g.fillRoundRect(SX + 2, cy + 2, 150, 155, BOX_ARC, BOX_ARC);
+        GradientPaint gpC = new GradientPaint(SX, cy, BOX_BG1, SX, cy + 155, BOX_BG2);
+        g.setPaint(gpC);
+        g.fillRoundRect(SX, cy, 150, 155, BOX_ARC, BOX_ARC);
+        g.setPaint(null);
+        g.setColor(BOX_BD);
+        g.setStroke(new BasicStroke(1.0f));
+        g.drawRoundRect(SX, cy, 150, 155, BOX_ARC, BOX_ARC);
+        g.setColor(LBL_C);
         g.setFont(labelF);
-        g.drawString("CONTROLS", SX + 35, cy + 17);
+        g.drawString("CONTROLS", SX + 30, cy + 17);
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 11));
-        g.setColor(new Color(210, 215, 235));
+        g.setColor(CTL_C);
         KeyBinding kb = KeyBinding.getSingle();
         String[] keys = {
             KeyBinding.keyName(kb.left) + "/" + KeyBinding.keyName(kb.right) + " : 이동",
@@ -429,11 +475,23 @@ public class GamePanel extends JPanel implements KeyListener {
     /** HOLD / NEXT 미리보기 박스 */
     private void drawMiniBox(Graphics2D g, int x, int y, String label,
                               Tetromino piece, boolean grayed, Font labelF) {
-        g.setColor(new Color(60, 66, 95));
-        g.fillRoundRect(x, y, 150, 105, 10, 10);
-        g.setColor(new Color(185, 195, 225));
+        // 그림자
+        g.setColor(new Color(0, 0, 0, 18));
+        g.fillRoundRect(x + 2, y + 2, 150, 105, BOX_ARC, BOX_ARC);
+        // 배경
+        GradientPaint gp = new GradientPaint(x, y, BOX_BG1, x, y + 105, BOX_BG2);
+        g.setPaint(gp);
+        g.fillRoundRect(x, y, 150, 105, BOX_ARC, BOX_ARC);
+        // 테두리
+        g.setPaint(null);
+        g.setColor(BOX_BD);
+        g.setStroke(new BasicStroke(1.0f));
+        g.drawRoundRect(x, y, 150, 105, BOX_ARC, BOX_ARC);
+        // 레이블
+        g.setColor(LBL_C);
         g.setFont(labelF);
-        g.drawString(label, x + 60, y + 16);
+        FontMetrics fmM = g.getFontMetrics();
+        g.drawString(label, x + (150 - fmM.stringWidth(label)) / 2, y + 16);
 
         if (piece != null) {
             Color color = grayed ? grayOut(piece.getColor()) : piece.getColor();
@@ -445,23 +503,32 @@ public class GamePanel extends JPanel implements KeyListener {
         }
     }
 
-    /** 홀드 잠금 시 블록을 회색조로 */
+    /** 홀드 잠금 시 블록을 밝은 회색조로 */
     private Color grayOut(Color c) {
         int avg = (c.getRed() + c.getGreen() + c.getBlue()) / 3;
-        int r = (avg + 100) / 2;
-        int gv = (avg + 100) / 2;
-        int b = (avg + 120) / 2;
-        return new Color(r, gv, b);
+        int v = (avg + 165) / 2;
+        return new Color(v, v, Math.min(255, v + 8));
     }
 
     private void drawInfoBox(Graphics2D g, int x, int y, String label, String value,
                               Font lf, Font vf) {
-        g.setColor(new Color(60, 66, 95));
-        g.fillRoundRect(x, y, 150, 58, 10, 10);
-        g.setColor(new Color(185, 195, 225));
+        // 그림자
+        g.setColor(new Color(0, 0, 0, 18));
+        g.fillRoundRect(x + 2, y + 2, 150, 58, BOX_ARC, BOX_ARC);
+        // 배경
+        GradientPaint gp = new GradientPaint(x, y, BOX_BG1, x, y + 58, BOX_BG2);
+        g.setPaint(gp);
+        g.fillRoundRect(x, y, 150, 58, BOX_ARC, BOX_ARC);
+        // 테두리
+        g.setPaint(null);
+        g.setColor(BOX_BD);
+        g.setStroke(new BasicStroke(1.0f));
+        g.drawRoundRect(x, y, 150, 58, BOX_ARC, BOX_ARC);
+        // 텍스트
+        g.setColor(LBL_C);
         g.setFont(lf);
         g.drawString(label, x + 10, y + 17);
-        g.setColor(Color.WHITE);
+        g.setColor(VAL_C);
         g.setFont(vf);
         g.drawString(value, x + 10, y + 45);
     }
@@ -469,27 +536,38 @@ public class GamePanel extends JPanel implements KeyListener {
     /** T-스핀 발생 시 화면 중앙에 메시지 표시 */
     private void drawTSpinMsg(Graphics2D g) {
         if (tSpinMsg.isEmpty()) return;
-        g.setFont(new Font("맑은 고딕", Font.BOLD, 20));
-        g.setColor(new Color(255, 220, 50));
-        FontMetrics fm = g.getFontMetrics();
+        g.setFont(new Font("맑은 고딕", Font.BOLD, 22));
         int bw = Board.COLS * CELL;
-        g.drawString(tSpinMsg, BX + (bw - fm.stringWidth(tSpinMsg)) / 2,
-                               BY + Board.ROWS * CELL / 2 - 20);
+        FontMetrics fm = g.getFontMetrics();
+        int tx = BX + (bw - fm.stringWidth(tSpinMsg)) / 2;
+        int ty = BY + Board.ROWS * CELL / 2 - 20;
+        g.setColor(new Color(0, 0, 0, 70));
+        g.drawString(tSpinMsg, tx + 2, ty + 2);
+        g.setColor(new Color(240, 148, 18));
+        g.drawString(tSpinMsg, tx, ty);
     }
 
     private void drawOverlay(Graphics2D g, String title, Color titleColor, String sub) {
         int bw = Board.COLS * CELL;
         int bh = Board.ROWS * CELL;
-        g.setColor(new Color(0, 0, 0, 170));
-        g.fillRect(BX, BY, bw, bh);
-        g.setFont(new Font("맑은 고딕", Font.BOLD, 26));
-        g.setColor(titleColor);
+        // 반투명 흰색 오버레이
+        g.setColor(new Color(255, 255, 255, 195));
+        g.fillRoundRect(BX, BY, bw, bh, BOX_ARC, BOX_ARC);
+        // 타이틀 그림자
+        g.setFont(new Font("맑은 고딕", Font.BOLD, 28));
         FontMetrics fm = g.getFontMetrics();
-        g.drawString(title, BX + (bw - fm.stringWidth(title)) / 2, BY + bh / 2 - 10);
+        int tx = BX + (bw - fm.stringWidth(title)) / 2;
+        int ty = BY + bh / 2 - 10;
+        g.setColor(new Color(0, 0, 0, 50));
+        g.drawString(title, tx + 2, ty + 2);
+        // 타이틀
+        g.setColor(titleColor);
+        g.drawString(title, tx, ty);
+        // 서브타이틀
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 13));
-        g.setColor(new Color(210, 210, 210));
         fm = g.getFontMetrics();
-        g.drawString(sub, BX + (bw - fm.stringWidth(sub)) / 2, BY + bh / 2 + 22);
+        g.setColor(new Color(62, 78, 158));
+        g.drawString(sub, BX + (bw - fm.stringWidth(sub)) / 2, BY + bh / 2 + 26);
     }
 
     // ── 키 이벤트 ─────────────────────────────────
