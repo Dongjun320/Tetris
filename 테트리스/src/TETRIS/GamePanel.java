@@ -44,25 +44,25 @@ public class GamePanel extends JPanel implements KeyListener {
     private long        lockFlashTime  = 0;
     private static final long LOCK_FLASH_MS = 100;
 
-    // ── 귀여운 UI 팔레트 (중간 밝기) ─────────────
-    private static final Color BG_TOP   = new Color(198, 194, 236);
-    private static final Color BG_BOT   = new Color(180, 200, 234);
-    private static final Color BOARD_BG = new Color(224, 226, 242);
-    private static final Color BOARD_BD = new Color(128, 118, 185);
-    private static final Color GRID_C   = new Color(190, 200, 228);
-    private static final Color BOX_BG1  = new Color(208, 218, 248);
-    private static final Color BOX_BG2  = new Color(194, 208, 238);
-    private static final Color BOX_BD   = new Color(136, 152, 208);
-    private static final Color LBL_C    = new Color(85, 102, 170);
-    private static final Color VAL_C    = new Color(38, 52, 158);
-    private static final Color CTL_C    = new Color(72, 88, 158);
+    // ── 미디엄 다크 UI 팔레트 ─────────────────────
+    private static final Color BG_TOP   = new Color(38, 44, 68);
+    private static final Color BG_BOT   = new Color(26, 32, 55);
+    private static final Color BOARD_BG = new Color(22, 26, 46);
+    private static final Color BOARD_BD = new Color(80, 86, 122);
+    private static final Color GRID_C   = new Color(46, 54, 80);
+    private static final Color BOX_BG1  = new Color(62, 70, 106);
+    private static final Color BOX_BG2  = new Color(54, 62, 96);
+    private static final Color BOX_BD   = new Color(86, 96, 142);
+    private static final Color LBL_C    = new Color(182, 196, 232);
+    private static final Color VAL_C    = new Color(228, 236, 255);
+    private static final Color CTL_C    = new Color(205, 216, 240);
     private static final int   CELL_ARC = 8;
     private static final int   BOX_ARC  = 12;
 
     // ── 초기화 ────────────────────────────────────
     public GamePanel() {
         setPreferredSize(new Dimension(SX + 160, BY * 2 + Board.ROWS * CELL));
-        setBackground(new Color(194, 190, 230));
+        setBackground(new Color(30, 36, 58));
         setFocusable(true);
         addKeyListener(this);
 
@@ -344,8 +344,8 @@ public class GamePanel extends JPanel implements KeyListener {
         if (ghost.getY() == current.getY()) return;
 
         Color base   = current.getColor();
-        Color fill   = new Color(base.getRed(), base.getGreen(), base.getBlue(), 28);
-        Color border = new Color(base.getRed(), base.getGreen(), base.getBlue(), 178);
+        Color fill   = new Color(base.getRed(), base.getGreen(), base.getBlue(), 52);
+        Color border = new Color(base.getRed(), base.getGreen(), base.getBlue(), 148);
         int[][] shape = ghost.getShape();
         for (int r = 0; r < 4; r++)
             for (int c = 0; c < 4; c++)
@@ -503,11 +503,11 @@ public class GamePanel extends JPanel implements KeyListener {
         }
     }
 
-    /** 홀드 잠금 시 블록을 밝은 회색조로 */
+    /** 홀드 잠금 시 블록을 회색조로 (다크 배경용) */
     private Color grayOut(Color c) {
         int avg = (c.getRed() + c.getGreen() + c.getBlue()) / 3;
-        int v = (avg + 165) / 2;
-        return new Color(v, v, Math.min(255, v + 8));
+        int v = (avg + 100) / 2;
+        return new Color(v, v, Math.min(255, v + 12));
     }
 
     private void drawInfoBox(Graphics2D g, int x, int y, String label, String value,
@@ -550,15 +550,15 @@ public class GamePanel extends JPanel implements KeyListener {
     private void drawOverlay(Graphics2D g, String title, Color titleColor, String sub) {
         int bw = Board.COLS * CELL;
         int bh = Board.ROWS * CELL;
-        // 반투명 흰색 오버레이
-        g.setColor(new Color(255, 255, 255, 195));
+        // 반투명 어두운 오버레이
+        g.setColor(new Color(0, 0, 0, 172));
         g.fillRoundRect(BX, BY, bw, bh, BOX_ARC, BOX_ARC);
         // 타이틀 그림자
         g.setFont(new Font("맑은 고딕", Font.BOLD, 28));
         FontMetrics fm = g.getFontMetrics();
         int tx = BX + (bw - fm.stringWidth(title)) / 2;
         int ty = BY + bh / 2 - 10;
-        g.setColor(new Color(0, 0, 0, 50));
+        g.setColor(new Color(0, 0, 0, 90));
         g.drawString(title, tx + 2, ty + 2);
         // 타이틀
         g.setColor(titleColor);
@@ -566,7 +566,7 @@ public class GamePanel extends JPanel implements KeyListener {
         // 서브타이틀
         g.setFont(new Font("맑은 고딕", Font.PLAIN, 13));
         fm = g.getFontMetrics();
-        g.setColor(new Color(62, 78, 158));
+        g.setColor(new Color(200, 210, 238));
         g.drawString(sub, BX + (bw - fm.stringWidth(sub)) / 2, BY + bh / 2 + 26);
     }
 

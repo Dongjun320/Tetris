@@ -109,17 +109,17 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         }
     }
 
-    // ── 귀여운 UI 팔레트 (중간 밝기) ─────────────
-    private static final Color BG_TOP   = new Color(198, 194, 236);
-    private static final Color BG_BOT   = new Color(180, 200, 234);
-    private static final Color BOARD_BG = new Color(224, 226, 242);
-    private static final Color BOARD_BD = new Color(128, 118, 185);
-    private static final Color GRID_C   = new Color(190, 200, 228);
-    private static final Color BOX_BG1  = new Color(208, 218, 248);
-    private static final Color BOX_BG2  = new Color(194, 208, 238);
-    private static final Color BOX_BD   = new Color(136, 152, 208);
-    private static final Color LBL_C    = new Color(85, 102, 170);
-    private static final Color VAL_C    = new Color(38, 52, 158);
+    // ── 미디엄 다크 UI 팔레트 ─────────────────────
+    private static final Color BG_TOP   = new Color(38, 44, 68);
+    private static final Color BG_BOT   = new Color(26, 32, 55);
+    private static final Color BOARD_BG = new Color(22, 26, 46);
+    private static final Color BOARD_BD = new Color(80, 86, 122);
+    private static final Color GRID_C   = new Color(46, 54, 80);
+    private static final Color BOX_BG1  = new Color(62, 70, 106);
+    private static final Color BOX_BG2  = new Color(54, 62, 96);
+    private static final Color BOX_BD   = new Color(86, 96, 142);
+    private static final Color LBL_C    = new Color(182, 196, 232);
+    private static final Color VAL_C    = new Color(228, 236, 255);
     private static final int   CELL_ARC = 6;   // CELL=28 기준
     private static final int   BOX_ARC  = 12;
 
@@ -135,7 +135,7 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     // ── 초기화 ────────────────────────────────────
     public TwoPlayerPanel() {
         setPreferredSize(new Dimension(PANEL_W, PANEL_H));
-        setBackground(new Color(194, 190, 230));
+        setBackground(new Color(30, 36, 58));
         setFocusable(true);
         addKeyListener(this);
         timer = new Timer(16, e -> gameTick());
@@ -386,8 +386,8 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
             ghost.setY(ghost.getY()-1);
             if (ghost.getY() != p.current.getY()) {
                 Color base = p.current.getColor();
-                Color fill = new Color(base.getRed(),base.getGreen(),base.getBlue(),25);
-                Color brd  = new Color(base.getRed(),base.getGreen(),base.getBlue(),175);
+                Color fill = new Color(base.getRed(),base.getGreen(),base.getBlue(),52);
+                Color brd  = new Color(base.getRed(),base.getGreen(),base.getBlue(),148);
                 for (int r=0;r<4;r++) for (int c=0;c<4;c++)
                     if (ghost.getShape()[r][c]==1 && ghost.getY()+r>=0) {
                         int px=bx+(ghost.getX()+c)*CELL, py=BY+(ghost.getY()+r)*CELL;
@@ -462,20 +462,15 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         drawInfoBox(g, sx, y+312, "LINES", String.valueOf(p.lines), lf, vf);
         // 가비지 대기 표시
         if (p.delayedGarbage > 0) {
-            g.setColor(new Color(0, 0, 0, 18));
-            g.fillRoundRect(sx+2, y+376, SIDE_W, 36, 8, 8);
-            g.setColor(new Color(255, 235, 205));
+            g.setColor(new Color(55, 42, 22));
             g.fillRoundRect(sx, y+374, SIDE_W, 36, 8, 8);
-            g.setColor(new Color(195, 155, 90));
-            g.setStroke(new BasicStroke(1.0f));
-            g.drawRoundRect(sx, y+374, SIDE_W, 36, 8, 8);
-            g.setColor(new Color(180, 90, 10));
+            g.setColor(new Color(255, 150, 30));
             g.setFont(new Font("맑은 고딕", Font.BOLD, 11));
             long elapsed = System.currentTimeMillis() - p.garbageTime;
             int remaining = Math.max(0, (int)(3000 - elapsed) / 1000);
             g.drawString("공격 대기 " + p.delayedGarbage, sx+5, y+387);
             g.setFont(new Font("맑은 고딕", Font.PLAIN, 10));
-            g.setColor(new Color(160, 80, 10));
+            g.setColor(new Color(255, 185, 80));
             g.drawString(remaining + "초 후 적용", sx+15, y+400);
         }
     }
@@ -504,8 +499,8 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
 
     private Color grayOut(Color c) {
         int avg = (c.getRed()+c.getGreen()+c.getBlue())/3;
-        int v = (avg + 165)/2;
-        return new Color(v, v, Math.min(255, v+8));
+        int v = (avg + 100)/2;
+        return new Color(v, v, Math.min(255, v+12));
     }
 
     private void drawInfoBox(Graphics2D g, int x, int y, String label, String value,
@@ -573,16 +568,16 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         y += 16;
         g.setFont(new Font("맑은 고딕", Font.BOLD, 12));
         fm = g.getFontMetrics();
-        g.setColor(new Color(40, 100, 210));
+        g.setColor(new Color(105, 168, 255));
         g.drawString("PLAYER 1", cx - fm.stringWidth("PLAYER 1") / 2, y);
 
         KeyBinding kb1 = KeyBinding.getP1();
         y += 14;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.left)+"/"+KeyBinding.keyName(kb1.right), "이동",        kf, df, new Color(40, 105, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.rotate),   "회전",        kf, df, new Color(40, 105, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.softDrop), "소프트 드롭", kf, df, new Color(40, 105, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hardDrop), "하드 드롭",   kf, df, new Color(40, 105, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hold),     "홀드",        kf, df, new Color(40, 105, 215));
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.left)+"/"+KeyBinding.keyName(kb1.right), "이동",        kf, df, new Color(105, 168, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.rotate),   "회전",        kf, df, new Color(105, 168, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.softDrop), "소프트 드롭", kf, df, new Color(105, 168, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hardDrop), "하드 드롭",   kf, df, new Color(105, 168, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb1.hold),     "홀드",        kf, df, new Color(105, 168, 255));
 
         // 구분선
         y += 12;
@@ -592,16 +587,16 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         y += 16;
         g.setFont(new Font("맑은 고딕", Font.BOLD, 12));
         fm = g.getFontMetrics();
-        g.setColor(new Color(160, 40, 210));
+        g.setColor(new Color(205, 112, 255));
         g.drawString("PLAYER 2", cx - fm.stringWidth("PLAYER 2") / 2, y);
 
         KeyBinding kb2 = KeyBinding.getP2();
         y += 14;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.left)+"/"+KeyBinding.keyName(kb2.right), "이동",        kf, df, new Color(165, 40, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.rotate),   "회전",        kf, df, new Color(165, 40, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.softDrop), "소프트 드롭", kf, df, new Color(165, 40, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hardDrop), "하드 드롭",   kf, df, new Color(165, 40, 215)); y += 15;
-        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hold),     "홀드",        kf, df, new Color(165, 40, 215));
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.left)+"/"+KeyBinding.keyName(kb2.right), "이동",        kf, df, new Color(205, 112, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.rotate),   "회전",        kf, df, new Color(205, 112, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.softDrop), "소프트 드롭", kf, df, new Color(205, 112, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hardDrop), "하드 드롭",   kf, df, new Color(205, 112, 255)); y += 15;
+        drawKeyRow(g, CTR_X+10, y, KeyBinding.keyName(kb2.hold),     "홀드",        kf, df, new Color(205, 112, 255));
 
         // 구분선
         y += 12;
@@ -624,28 +619,26 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
         g.setColor(keyColor);
         g.drawString(key, x, y);
         g.setFont(descFont);
-        g.setColor(new Color(95, 110, 165));
+        g.setColor(new Color(138, 152, 205));
         g.drawString(desc, x + 54, y);
     }
 
     private void drawGarbageIndicator(Graphics2D g, int x, int y, int count, boolean toRight) {
         int sqSize = 10;
         int boxW = CTR_W - 20;
-        g.setColor(new Color(255, 235, 205));
+        g.setColor(new Color(52, 38, 18));
         g.fillRoundRect(x - 2, y - 2, boxW, sqSize + 8, 6, 6);
-        g.setColor(new Color(195, 155, 90));
-        g.drawRoundRect(x - 2, y - 2, boxW, sqSize + 8, 6, 6);
         for (int i = 0; i < Math.min(count, 6); i++) {
-            g.setColor(new Color(240, 120, 30));
+            g.setColor(new Color(255, 132, 30));
             g.fillRoundRect(x + i * (sqSize + 2), y + 2, sqSize, sqSize, 3, 3);
         }
         if (count > 6) {
             g.setFont(new Font("맑은 고딕", Font.BOLD, 9));
-            g.setColor(new Color(175, 80, 10));
+            g.setColor(new Color(255, 178, 80));
             g.drawString("+" + (count - 6), x + 6 * (sqSize + 2) + 2, y + 10);
         }
         g.setFont(new Font("맑은 고딕", Font.BOLD, 10));
-        g.setColor(new Color(165, 80, 10));
+        g.setColor(new Color(255, 178, 80));
         g.drawString(toRight ? "→ P2" : "← P1", x + boxW - 34, y + 10);
     }
 
@@ -665,18 +658,18 @@ public class TwoPlayerPanel extends JPanel implements KeyListener {
     }
 
     private void drawWinLoseOverlay(Graphics2D g, int bx, String msg, boolean win) {
-        // 반투명 흰색 오버레이
-        g.setColor(new Color(255, 255, 255, win ? 175 : 210));
+        // 반투명 어두운 오버레이
+        g.setColor(new Color(0, 0, 0, win ? 108 : 158));
         g.fillRoundRect(bx, BY, BOARD_W, BOARD_H, BOX_ARC, BOX_ARC);
         g.setFont(new Font("맑은 고딕", Font.BOLD, 36));
         FontMetrics fm = g.getFontMetrics();
         int tx = bx + (BOARD_W - fm.stringWidth(msg)) / 2;
         int ty = BY + BOARD_H / 2;
         // 그림자
-        g.setColor(new Color(0, 0, 0, 55));
+        g.setColor(new Color(0, 0, 0, 80));
         g.drawString(msg, tx + 2, ty + 2);
         // 메인
-        g.setColor(win ? new Color(40, 185, 60) : new Color(210, 55, 65));
+        g.setColor(win ? new Color(80, 225, 80) : new Color(225, 72, 72));
         g.drawString(msg, tx, ty);
     }
 
